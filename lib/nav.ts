@@ -30,7 +30,7 @@ export type NavItem = {
  */
 export const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Enquiries', href: '/enquiries', icon: FileText, badge: 'New', permission: PERMISSIONS.ENQUIRY.READ },
+  { label: 'Enquiries', href: '/enquiries', icon: FileText, badge: 'New', permission: 'enquiry:read_team' },
   { label: 'Customer Interactions', href: '/customer-interactions', icon: MessageSquare, permission: PERMISSIONS.INTERACTION.READ_ALL },
   {
     label: 'Admin',

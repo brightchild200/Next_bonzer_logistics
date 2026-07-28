@@ -26,11 +26,13 @@ export const PERMISSIONS = {
   },
   ENQUIRY: {
     CREATE: 'enquiry:create',
-    READ: 'enquiry:read',
-    UPDATE: 'enquiry:update',
-    ASSIGN: 'enquiry:assign',
-    CONVERT: 'enquiry:convert',
-  },
+    READ_ASSIGNED: 'enquiry:read_assigned',
+    READ_TEAM: 'enquiry:read_team',
+    UPDATE_CS_FIELDS: 'enquiry:update_cs_fields',
+    UPDATE_SALES_FIELDS: 'enquiry:update_sales_fields',
+    ASSIGN_CS: 'enquiry:assign_cs',
+    CONVERT_JOB: 'enquiry:convert_job',
+},
   INTERACTION: {
     CREATE: 'interaction:create',
     READ_ALL: 'interaction:read_all',

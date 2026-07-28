@@ -178,6 +178,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles((data?.roles ?? []) as Role[]);
     setPermissions((data?.permissions ?? []) as Permission[]);
 
+    console.log("ROLES:", data?.roles);
+    console.log("PERMISSIONS:", data?.permissions);
+
     if (isVisibleRef.current) {
       scheduleIdleTimeout(IDLE_SESSION_TIMEOUT_MS);
     }

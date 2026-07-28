@@ -14,19 +14,22 @@ import { StatusBadge } from '@/components/status-badge';
 import { supabase } from '@/lib/supabase';
 import type { Enquiry, ActivityLog } from '@/lib/supabase';
 import {
-  MapPin,
-  Package,
-  Weight,
-  Box,
-  Calendar,
-  FileText,
-  Pencil,
-  Trash2,
-  Clock,
-  Plane,
-  Ship,
-  Truck,
-  Train,
+ MapPin,
+ Package,
+ Weight,
+ Box,
+ Calendar,
+ FileText,
+ Pencil,
+ Trash2,
+ Clock,
+ Plane,
+ Ship,
+ Truck,
+ Train,
+ CheckCircle,
+ XCircle,
+ Archive
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -66,6 +69,39 @@ export function EnquiryDetailPanel({
 
   if (!enquiry) return null;
   const ModeIcon = modeIcons[enquiry.mode] ?? Package;
+  
+  const updateStatus = async (
+  status: string,
+  timestampField?: string
+) => {
+  const updateData: any = {
+    status,
+  };
+
+  if (timestampField) {
+    updateData[timestampField] = new Date().toISOString();
+  }
+
+  const { error } = await supabase
+    .from('enquiries')
+    .update(updateData)
+    .eq('id', enquiry.id);
+
+  if (error) {
+  console.error(error);
+  return;
+}
+
+
+await supabase.from('activity_log').insert({
+  entity_type: 'enquiry',
+  action: `Status changed to ${status}`,
+  description: enquiry.reference,
+});
+
+
+setOpen(false);
+onDeleted();
 
   const handleDelete = async () => {
     const { error } = await supabase.from('enquiries').delete().eq('id', enquiry.id);
@@ -240,6 +276,83 @@ export function EnquiryDetailPanel({
             </div>
           </div>
 
+          {/* Status Actions */}
+<div className="space-y-2">
+
+<p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+  Workflow
+</p>
+
+
+<div className="flex flex-wrap gap-2">
+
+
+{enquiry.status === 'new' && (
+<Button
+onClick={() =>
+updateStatus(
+'quoted',
+'quoted_at'
+)
+}
+>
+<CheckCircle className="mr-2 h-4 w-4"/>
+Mark Quoted
+</Button>
+)}
+
+
+{enquiry.status === 'quoted' && (
+<>
+<Button
+onClick={() =>
+updateStatus(
+'won',
+'won_at'
+)
+}
+>
+<CheckCircle className="mr-2 h-4 w-4"/>
+Mark Won
+</Button>
+
+
+<Button
+variant="outline"
+onClick={() =>
+updateStatus(
+'lost',
+'lost_at'
+)
+}
+>
+<XCircle className="mr-2 h-4 w-4"/>
+Mark Lost
+</Button>
+</>
+)}
+
+
+{enquiry.status === 'lost' && (
+<Button
+variant="outline"
+onClick={() =>
+updateStatus(
+'archived',
+'archived_at'
+)
+}
+>
+<Archive className="mr-2 h-4 w-4"/>
+Archive
+</Button>
+)}
+
+
+</div>
+
+</div>
+
           {/* Actions */}
           <div className="flex gap-2">
             <Button className="flex-1" onClick={() => onEdit(enquiry)}>
@@ -253,4 +366,5 @@ export function EnquiryDetailPanel({
       </SheetContent>
     </Sheet>
   );
+}
 }
