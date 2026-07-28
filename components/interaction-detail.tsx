@@ -512,51 +512,52 @@ export function InteractionDetail({
                     <div className="space-y-3">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Pending ({pendingFollowups.length})
-                        {pendingFollowups.some(isOverdue) && (
-                          <Bell className="ml-2 h-3.5 w-3.5 text-destructive" title="Has overdue follow-ups" />
+                        {pendingFollowups.some((f) => isOverdue(f.dueAt)) && (
+                          <span title="Has overdue follow-ups">
+                            <Bell className="ml-2 h-3.5 w-3.5 text-destructive" />
+                          </span>
                         )}
                       </h4>
                       {pendingFollowups.map((followup) => {
-                            const overdue = isOverdue(followup.dueAt);
-                            return (
-                              <div
-                                key={followup.id}
-                                className={`flex items-center justify-between p-4 rounded-lg border ${
-                                  overdue ? 'bg-destructive/5 border-destructive/20' : 'bg-yellow-50'
-                                }`}
+                        const overdue = isOverdue(followup.dueAt);
+                        return (
+                          <div
+                            key={followup.id}
+                            className={`flex items-center justify-between p-4 rounded-lg border ${overdue ? 'bg-destructive/5 border-destructive/20' : 'bg-yellow-50'
+                              }`}
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">{followup.followupRef}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Due: {new Date(followup.dueAt).toLocaleDateString('en-GB', {
+                                  weekday: 'short',
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                                {overdue && <span className="ml-2 text-destructive font-medium">(OVERDUE)</span>}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <StatusBadge status="Pending" />
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleOpenCompleteDialog(followup.id)}
+                                disabled={completingFollowupId === followup.id}
                               >
-                                <div className="flex-1">
-                                  <p className="font-medium text-sm">{followup.followupRef}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    Due: {new Date(followup.dueAt).toLocaleDateString('en-GB', {
-                                      weekday: 'short',
-                                      day: '2-digit',
-                                      month: 'short',
-                                      year: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                    {overdue && <span className="ml-2 text-destructive font-medium">(OVERDUE)</span>}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <StatusBadge status="Pending" />
-                                  <Button
-                                    size="sm"
-                                    variant="default"
-                                    onClick={() => handleOpenCompleteDialog(followup.id)}
-                                    disabled={completingFollowupId === followupId}
-                                  >
-                                    {completingFollowupId === followupId ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      'Complete'
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                                {completingFollowupId === followup.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  'Complete'
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 

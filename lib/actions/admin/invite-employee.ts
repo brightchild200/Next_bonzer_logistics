@@ -51,7 +51,7 @@ export async function inviteEmployee(input: InviteEmployeeInput): Promise<Invite
 
   const email = input.email?.trim().toLowerCase();
   const fullName = input.full_name?.trim();
-  const phone = input.phone?.trim() || null;
+  const phone = input.phone?.trim() || undefined;
   const roleIds = Array.from(new Set(input.role_ids ?? []));
 
   if (!email) {

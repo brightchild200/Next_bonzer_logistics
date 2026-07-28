@@ -72,6 +72,22 @@ export async function createInteraction(
     return { success: false, error: 'Interaction date/time is required' };
   }
 
+  if (!input.contactPersonName || !input.contactPersonName.trim()) {
+    return { success: false, error: 'Contact person name is required' };
+  }
+
+  if (!input.contactPersonMobile || !input.contactPersonMobile.trim()) {
+    return { success: false, error: 'Contact person mobile is required' };
+  }
+
+  if (!input.interactionChannel) {
+    return { success: false, error: 'Interaction channel is required' };
+  }
+
+  if (input.interactionDurationMinutes !== undefined && input.interactionDurationMinutes !== null && input.interactionDurationMinutes < 0) {
+    return { success: false, error: 'Interaction duration must be >= 0' };
+  }
+
   const { data: customer, error: customerError } = await supabase
     .from('customers')
     .select('id')
@@ -136,6 +152,12 @@ export async function createInteraction(
       subject: input.subject?.trim() || null,
       notes: input.notes.trim(),
       interaction_at: input.interactionAt,
+      contact_person_name: input.contactPersonName.trim(),
+      contact_person_mobile: input.contactPersonMobile.trim(),
+      contact_person_email: input.contactPersonEmail?.trim() || null,
+      contact_person_designation: input.contactPersonDesignation?.trim() || null,
+      interaction_channel: input.interactionChannel,
+      interaction_duration_minutes: input.interactionDurationMinutes ?? null,
       created_by: user.id,
       updated_by: user.id,
       created_at: now,

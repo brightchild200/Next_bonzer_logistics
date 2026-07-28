@@ -3,6 +3,7 @@
 import * as React from 'react';
 import * as LabelPrimitive from '@radix-ui/react-label';
 import { Slot } from '@radix-ui/react-slot';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import {
   Controller,
   ControllerProps,
@@ -74,7 +75,7 @@ const FormItemContext = React.createContext<FormItemContextValue>(
 
 const FormItem = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+  React.HTMLAttributes<HTMLDivElement> & { className?: string }
 >(({ className, ...props }, ref) => {
   const id = React.useId();
 
@@ -95,7 +96,7 @@ const FormLabel = React.forwardRef<
   return (
     <Label
       ref={ref}
-      className={cn(error && 'text-destructive', className)}
+      className={cn('font-medium', error && 'text-destructive', className)}
       htmlFor={formItemId}
       {...props}
     />
@@ -107,8 +108,7 @@ const FormControl = React.forwardRef<
   React.ElementRef<typeof Slot>,
   React.ComponentPropsWithoutRef<typeof Slot>
 >(({ ...props }, ref) => {
-  const { error, formItemId, formDescriptionId, formMessageId } =
-    useFormField();
+  const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
 
   return (
     <Slot
@@ -145,12 +145,12 @@ FormDescription.displayName = 'FormDescription';
 
 const FormMessage = React.forwardRef<
   HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(({ className, children, ...props }, ref) => {
-  const { error, formMessageId } = useFormField();
+  React.HTMLAttributes<HTMLParagraphElement> & { icon?: boolean }
+>(({ className, children, icon = true, ...props }, ref) => {
+  const { error, formMessageId, isDirty, isValidating } = useFormField();
   const body = error ? String(error?.message) : children;
 
-  if (!body) {
+  if (!body && !isValidating) {
     return null;
   }
 
@@ -158,10 +158,36 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
-      className={cn('text-sm font-medium text-destructive', className)}
+      className={cn(
+        'flex items-center gap-1.5 text-sm transition-colors',
+        isValidating ? 'text-muted-foreground' : 'text-destructive',
+        className,
+      )}
       {...props}
     >
-      {body}
+      {isValidating ? (
+        <>
+          <span className="h-4 w-4 animate-spin" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+              <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+            </svg>
+          </span>
+          Validating...
+        </>
+      ) : error ? (
+        <>
+          {icon && <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden="true" />}
+          {body}
+        </>
+      ) : icon && isDirty ? (
+        <>
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success" aria-hidden="true" />
+          {body}
+        </>
+      ) : (
+        body
+      )}
     </p>
   );
 });

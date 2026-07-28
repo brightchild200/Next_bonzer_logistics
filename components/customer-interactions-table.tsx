@@ -92,10 +92,10 @@ export function CustomerInteractionsTable({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [customerId, setCustomerId] = useState<string>('');
-  const [employeeId, setEmployeeId] = useState<string>('');
-  const [interactionTypeId, setInteractionTypeId] = useState<string>('');
-  const [interactionOutcomeId, setInteractionOutcomeId] = useState<string>('');
+  const [customerId, setCustomerId] = useState<string>('__all__');
+  const [employeeId, setEmployeeId] = useState<string>('__all__');
+  const [interactionTypeId, setInteractionTypeId] = useState<string>('__all__');
+  const [interactionOutcomeId, setInteractionOutcomeId] = useState<string>('__all__');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [isActive, setIsActive] = useState<boolean | undefined>(undefined);
@@ -109,10 +109,10 @@ export function CustomerInteractionsTable({
     setError(null);
     try {
       const result = await listInteractions({
-        customerId: customerId || undefined,
-        employeeId: employeeId || undefined,
-        interactionTypeId: interactionTypeId || undefined,
-        interactionOutcomeId: interactionOutcomeId || undefined,
+        customerId: customerId === '__all__' ? undefined : customerId,
+        employeeId: employeeId === '__all__' ? undefined : employeeId,
+        interactionTypeId: interactionTypeId === '__all__' ? undefined : interactionTypeId,
+        interactionOutcomeId: interactionOutcomeId === '__all__' ? undefined : interactionOutcomeId,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         isActive,
@@ -176,16 +176,16 @@ export function CustomerInteractionsTable({
 
   const clearFilters = () => {
     setSearch('');
-    setCustomerId('');
-    setEmployeeId('');
-    setInteractionTypeId('');
-    setInteractionOutcomeId('');
+    setCustomerId('__all__');
+    setEmployeeId('__all__');
+    setInteractionTypeId('__all__');
+    setInteractionOutcomeId('__all__');
     setDateFrom('');
     setDateTo('');
     setIsActive(undefined);
   };
 
-  const hasFilters = search || customerId || employeeId || interactionTypeId || interactionOutcomeId || dateFrom || dateTo || isActive !== undefined;
+  const hasFilters = search || customerId !== '__all__' || employeeId !== '__all__' || interactionTypeId !== '__all__' || interactionOutcomeId !== '__all__' || dateFrom || dateTo || isActive !== undefined;
 
   return (
     <div className="animate-fade-in">
@@ -220,7 +220,7 @@ export function CustomerInteractionsTable({
                 <SelectValue placeholder="Customer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Customers</SelectItem>
+                <SelectItem value="__all__">All Customers</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.companyName} ({c.customerRef})
@@ -234,7 +234,7 @@ export function CustomerInteractionsTable({
                 <SelectValue placeholder="Employee" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Employees</SelectItem>
+                <SelectItem value="__all__">All Employees</SelectItem>
                 {employees.map((emp) => (
                   <SelectItem key={emp.id} value={emp.id}>
                     {emp.fullName} {emp.employeeCode ? `(${emp.employeeCode})` : ''}
@@ -248,7 +248,7 @@ export function CustomerInteractionsTable({
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="__all__">All Types</SelectItem>
                 {interactionTypes.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.name}
@@ -262,7 +262,7 @@ export function CustomerInteractionsTable({
                 <SelectValue placeholder="Outcome" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Outcomes</SelectItem>
+                <SelectItem value="__all__">All Outcomes</SelectItem>
                 {interactionOutcomes.map((o) => (
                   <SelectItem key={o.id} value={o.id}>
                     {o.name}

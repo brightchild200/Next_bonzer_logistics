@@ -15,7 +15,7 @@ import type { Permission } from '@/lib/auth/permissions';
 function filterNavItems(items: NavItem[], can: (permission: Permission) => boolean): NavItem[] {
   return items
     .map((item) => {
-      if (item.permission && !can(item.permission)) {
+      if (item.permissions && item.permissions.length > 0 && !item.permissions.some((p) => can(p))) {
         return null;
       }
       if (item.children) {

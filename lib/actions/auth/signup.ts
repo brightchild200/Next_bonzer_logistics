@@ -68,11 +68,11 @@ export async function signup(input: SignupInput): Promise<SignupResult> {
   }
 
   // Determine role: first user gets admin, others get salesperson
-  const { data: existingProfiles } = await adminClient
+  const { count: profileCount } = await adminClient
     .from('profiles')
     .select('id', { count: 'exact', head: true });
 
-  const isFirstUser = (existingProfiles?.count ?? 0) === 0;
+  const isFirstUser = (profileCount ?? 0) === 0;
   const roleName = isFirstUser ? 'admin' : 'salesperson';
 
   const { data: roleData, error: roleError } = await adminClient

@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
-  const idleTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const idleTimerRef = useRef<number | null>(null);
   const idleDeadlineRef = useRef<number | null>(null);
   const pausedRemainingRef = useRef<number | null>(null);
   const isVisibleRef = useRef(true);
@@ -183,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     let active = true;
 
@@ -265,6 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const hasRole = (role: Role): boolean => {
     return roles.includes(role);

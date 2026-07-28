@@ -103,6 +103,42 @@ export async function updateInteraction(
     updateData.is_active = input.isActive;
   }
 
+  if (input.contactPersonName !== undefined) {
+    if (!input.contactPersonName || !input.contactPersonName.trim()) {
+      return { success: false, error: 'Contact person name cannot be empty' };
+    }
+    updateData.contact_person_name = input.contactPersonName.trim();
+  }
+
+  if (input.contactPersonMobile !== undefined) {
+    if (!input.contactPersonMobile || !input.contactPersonMobile.trim()) {
+      return { success: false, error: 'Contact person mobile cannot be empty' };
+    }
+    updateData.contact_person_mobile = input.contactPersonMobile.trim();
+  }
+
+  if (input.contactPersonEmail !== undefined) {
+    updateData.contact_person_email = input.contactPersonEmail?.trim() || null;
+  }
+
+  if (input.contactPersonDesignation !== undefined) {
+    updateData.contact_person_designation = input.contactPersonDesignation?.trim() || null;
+  }
+
+  if (input.interactionChannel !== undefined) {
+    if (!input.interactionChannel) {
+      return { success: false, error: 'Interaction channel cannot be empty' };
+    }
+    updateData.interaction_channel = input.interactionChannel;
+  }
+
+  if (input.interactionDurationMinutes !== undefined) {
+    if (input.interactionDurationMinutes !== null && input.interactionDurationMinutes < 0) {
+      return { success: false, error: 'Interaction duration must be >= 0' };
+    }
+    updateData.interaction_duration_minutes = input.interactionDurationMinutes;
+  }
+
   const { data: interaction, error: updateError } = await supabase
     .from('customer_interactions')
     .update(updateData)

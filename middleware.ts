@@ -1,6 +1,7 @@
-import { type NextRequest } from 'next/server';
+import { NextResponse,type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/db/middleware';
 import { createServerClient } from '@supabase/ssr';
+
 
 function getPathname(request: NextRequest) {
   try {
@@ -54,7 +55,7 @@ export async function middleware(request: NextRequest) {
     if (pathname !== '/login') {
       loginUrl.searchParams.set('redirectTo', pathname);
     }
-    const redirectResponse = Response.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value);
     });
@@ -69,7 +70,7 @@ export async function middleware(request: NextRequest) {
   if (profile && profile.is_active === false) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('error', 'Your account has been deactivated. Please contact your administrator.');
-    const redirectResponse = Response.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value);
     });
@@ -83,7 +84,7 @@ export async function middleware(request: NextRequest) {
     if (pathname !== '/login') {
       loginUrl.searchParams.set('redirectTo', pathname);
     }
-    const redirectResponse = Response.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value);
     });

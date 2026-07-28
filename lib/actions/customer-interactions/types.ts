@@ -7,6 +7,14 @@ export type InteractionTypeCode =
   | 'WALK_IN'
   | 'OTHER';
 
+export type InteractionChannel =
+  | 'CALL'
+  | 'VISIT'
+  | 'WHATSAPP'
+  | 'EMAIL'
+  | 'MEETING'
+  | 'VIDEO_CALL';
+
 export type InteractionOutcomeCode =
   | 'INTERESTED'
   | 'NOT_INTERESTED'
@@ -48,9 +56,15 @@ export interface CreateInteractionInput {
   employeeId: string;
   interactionTypeId: string;
   interactionOutcomeId: string;
-  subject: string | null;
+  subject?: string | null;
   notes: string;
   interactionAt: string;
+  contactPersonName: string;
+  contactPersonMobile: string;
+  contactPersonEmail?: string | null;
+  contactPersonDesignation?: string | null;
+  interactionChannel: InteractionChannel;
+  interactionDurationMinutes?: number | null;
 }
 
 export interface UpdateInteractionInput {
@@ -60,6 +74,12 @@ export interface UpdateInteractionInput {
   notes?: string;
   interactionAt?: string;
   isActive?: boolean;
+  contactPersonName?: string;
+  contactPersonMobile?: string;
+  contactPersonEmail?: string | null;
+  contactPersonDesignation?: string | null;
+  interactionChannel?: InteractionChannel;
+  interactionDurationMinutes?: number | null;
 }
 
 export interface CreateFollowupInput {
@@ -136,6 +156,12 @@ export interface CustomerInteraction {
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
+  contactPersonName: string;
+  contactPersonMobile: string;
+  contactPersonEmail: string | null;
+  contactPersonDesignation: string | null;
+  interactionChannel: InteractionChannel;
+  interactionDurationMinutes: number | null;
 }
 
 export interface InteractionFollowup {
@@ -152,4 +178,27 @@ export interface InteractionFollowup {
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
+}
+
+export interface InteractionAttachment {
+  id: string;
+  interactionId: string;
+  storagePath: string;
+  originalName: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedBy: string;
+  uploadedAt: string;
+  createdAt: string;
+}
+
+export interface InteractionLocation {
+  id: string;
+  interactionId: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  capturedAt: string;
+  capturedBy: string;
+  createdAt: string;
 }

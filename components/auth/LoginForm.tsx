@@ -57,11 +57,6 @@ export function LoginForm() {
     } finally {
       setLoading(false);
     }
-    const { data: authContext, error: authContextError } =
-  await supabase.rpc('get_my_auth_context');
-
-console.log('BONZER AUTH CONTEXT:', authContext);
-console.log('BONZER AUTH CONTEXT ERROR:', authContextError);
   }
 
   return (
@@ -184,9 +179,9 @@ console.log('BONZER AUTH CONTEXT ERROR:', authContextError);
           ======================================================== */}
       <div className="text-center pt-4 border-t border-gray-200">
         <p className="text-gray-600 text-sm">
-          Don't have an account?{' '}
+          Do not have an account?{' '}
           <a
-            href="/register"
+            href="/signup"
             className="font-semibold text-orange-600 hover:text-orange-700 transition-colors"
           >
             Sign up

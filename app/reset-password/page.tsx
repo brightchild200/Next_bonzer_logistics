@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/db/client';
 import { Eye, EyeOff, Lock, Loader2, Check, AlertCircle, ArrowLeft } from 'lucide-react';
@@ -28,19 +28,7 @@ export default function ResetPasswordPage() {
     { label: 'Passwords match', ok: password === confirmPassword && password.length > 0 },
   ];
 
-  useEffect(() => {
-    if (sessionEstablished) return;
-
-    const hash = window.location.hash;
-    if (!hash) {
-      setError('Invalid reset link. Missing authentication tokens.');
-      return;
-    }
-
-    establishSessionFromHash(hash);
-  }, [sessionEstablished]);
-
-  const establishSessionFromHash = async (hash: string) => {
+  const establishSessionFromHash = useCallback(async (hash: string) => {
     setLoading(true);
 
     try {
@@ -75,7 +63,19 @@ export default function ResetPasswordPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (sessionEstablished) return;
+
+    const hash = window.location.hash;
+    if (!hash) {
+      setError('Invalid reset link. Missing authentication tokens.');
+      return;
+    }
+
+    void establishSessionFromHash(hash);
+  }, [sessionEstablished, establishSessionFromHash]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

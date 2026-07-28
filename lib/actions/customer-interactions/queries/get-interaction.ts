@@ -2,12 +2,16 @@
 
 import { createClient } from '@/lib/db/server';
 import type { Permission } from '@/lib/auth/permissions';
-import type { CustomerInteraction } from '../types';
+import type { CustomerInteraction, InteractionChannel } from '../types';
 
 type CustomerInteractionRow = {
   id: string;
   interaction_ref: string;
   customer_id: string;
+  customer: Array<{
+    customer_ref: string;
+    company_name: string;
+  }>;
   enquiry_id: string | null;
   employee_id: string;
   interaction_type_id: string;
@@ -20,6 +24,12 @@ type CustomerInteractionRow = {
   created_at: string;
   updated_at: string;
   is_active: boolean;
+  contact_person_name: string;
+  contact_person_mobile: string;
+  contact_person_email: string | null;
+  contact_person_designation: string | null;
+  interaction_channel: string;
+  interaction_duration_minutes: number | null;
 };
 
 export interface GetInteractionResult {
@@ -71,6 +81,10 @@ export async function getInteraction(
       id,
       interaction_ref,
       customer_id,
+      customer:customers!customer_id (
+        customer_ref,
+        company_name
+      ),
       enquiry_id,
       employee_id,
       interaction_type_id,
@@ -82,7 +96,13 @@ export async function getInteraction(
       updated_by,
       created_at,
       updated_at,
-      is_active
+      is_active,
+      contact_person_name,
+      contact_person_mobile,
+      contact_person_email,
+      contact_person_designation,
+      interaction_channel,
+      interaction_duration_minutes
       `
     )
     .eq('id', interactionId)
@@ -93,6 +113,7 @@ export async function getInteraction(
   }
 
   const row = data as CustomerInteractionRow;
+  const customer = row.customer?.[0] ?? null;
 
   return {
     success: true,
@@ -100,6 +121,8 @@ export async function getInteraction(
       id: row.id,
       interactionRef: row.interaction_ref,
       customerId: row.customer_id,
+      customerRef: customer?.customer_ref ?? '',
+      companyName: customer?.company_name ?? '',
       enquiryId: row.enquiry_id,
       employeeId: row.employee_id,
       interactionTypeId: row.interaction_type_id,
@@ -112,6 +135,12 @@ export async function getInteraction(
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       isActive: row.is_active,
+      contactPersonName: row.contact_person_name,
+      contactPersonMobile: row.contact_person_mobile,
+      contactPersonEmail: row.contact_person_email,
+      contactPersonDesignation: row.contact_person_designation,
+      interactionChannel: row.interaction_channel as InteractionChannel,
+      interactionDurationMinutes: row.interaction_duration_minutes,
     },
   };
 }

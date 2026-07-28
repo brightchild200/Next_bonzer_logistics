@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/db/client';
 import { Eye, EyeOff, Lock, Loader2, Check, AlertCircle } from 'lucide-react';
@@ -28,19 +28,7 @@ export default function SetPasswordPage() {
     { label: 'Passwords match', ok: password === confirmPassword && password.length > 0 },
   ];
 
-  useEffect(() => {
-    if (sessionEstablished) return;
-
-    const hash = window.location.hash;
-    if (!hash) {
-      setInviteError('Invalid invitation link. Missing authentication tokens.');
-      return;
-    }
-
-    establishSessionFromHash(hash);
-  }, [sessionEstablished]);
-
-  const establishSessionFromHash = async (hash: string) => {
+  const establishSessionFromHash = useCallback(async (hash: string) => {
     setLoading(true);
 
     try {
@@ -75,7 +63,19 @@ export default function SetPasswordPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (sessionEstablished) return;
+
+    const hash = window.location.hash;
+    if (!hash) {
+      setInviteError('Invalid invitation link. Missing authentication tokens.');
+      return;
+    }
+
+    void establishSessionFromHash(hash);
+  }, [sessionEstablished, establishSessionFromHash]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +154,7 @@ export default function SetPasswordPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Set Your Password</h1>
             <p className="text-gray-600 mt-2">
-              You've been invited to Bonzer Logistics. Create a secure password to get started.
+              You have been invited to Bonzer Logistics. Create a secure password to get started.
             </p>
           </div>
 

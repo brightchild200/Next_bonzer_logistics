@@ -3,17 +3,16 @@
 import { createClient } from '@/lib/db/server';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
-import type {
-  CustomerInteraction,
-  InteractionFilters,
-} from '../types';
+import type { CustomerInteraction, InteractionChannel, InteractionFilters } from '../types';
 
 type CustomerInteractionRow = {
   id: string;
   interaction_ref: string;
   customer_id: string;
-  customer_ref: string;
-  company_name: string;
+  customer: Array<{
+    customer_ref: string;
+    company_name: string;
+  }>;
   enquiry_id: string | null;
   employee_id: string;
   interaction_type_id: string;
@@ -26,6 +25,12 @@ type CustomerInteractionRow = {
   created_at: string;
   updated_at: string;
   is_active: boolean;
+  contact_person_name: string;
+  contact_person_mobile: string;
+  contact_person_email: string | null;
+  contact_person_designation: string | null;
+  interaction_channel: string;
+  interaction_duration_minutes: number | null;
 };
 
 export interface ListInteractionsResult {
@@ -69,7 +74,10 @@ export async function listInteractions(
     ? authContext.permissions
     : [];
 
-  if (!userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL)) {
+  const hasReadAll = userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL);
+  const hasReadOwn = userPermissions.includes(PERMISSIONS.INTERACTION.READ_OWN);
+
+  if (!hasReadAll && !hasReadOwn) {
     return { success: false, error: 'Insufficient permissions' };
   }
 
@@ -98,18 +106,31 @@ export async function listInteractions(
       updated_by,
       created_at,
       updated_at,
-      is_active
+      is_active,
+      contact_person_name,
+      contact_person_mobile,
+      contact_person_email,
+      contact_person_designation,
+      interaction_channel,
+      interaction_duration_minutes
       `,
       { count: 'exact' }
     )
     .order('interaction_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
+  if (!hasReadAll && hasReadOwn) {
+    query = query.eq('employee_id', user.id);
+  }
+
   if (filters.customerId) {
     query = query.eq('customer_id', filters.customerId);
   }
 
   if (filters.employeeId) {
+    if (!hasReadAll) {
+      return { success: false, error: 'Insufficient permissions to filter by employee' };
+    }
     query = query.eq('employee_id', filters.employeeId);
   }
 
@@ -158,13 +179,13 @@ export async function listInteractions(
     success: true,
     interactions: (data ?? []).map((interaction) => {
       const row = interaction as CustomerInteractionRow;
-      const customer = row.customer as { customer_ref: string; company_name: string } | null;
+      const customer = row.customer?.[0] ?? null;
       return {
         id: row.id,
         interactionRef: row.interaction_ref,
         customerId: row.customer_id,
-        customerRef: customer?.customer_ref || '',
-        companyName: customer?.company_name || '',
+        customerRef: customer?.customer_ref ?? '',
+        companyName: customer?.company_name ?? '',
         enquiryId: row.enquiry_id,
         employeeId: row.employee_id,
         interactionTypeId: row.interaction_type_id,
@@ -177,6 +198,12 @@ export async function listInteractions(
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         isActive: row.is_active,
+        contactPersonName: row.contact_person_name,
+        contactPersonMobile: row.contact_person_mobile,
+        contactPersonEmail: row.contact_person_email,
+        contactPersonDesignation: row.contact_person_designation,
+        interactionChannel: row.interaction_channel as InteractionChannel,
+        interactionDurationMinutes: row.interaction_duration_minutes,
       } satisfies CustomerInteraction;
     }),
     total: count ?? 0,

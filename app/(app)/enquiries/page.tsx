@@ -21,6 +21,7 @@ import {
   Train,
   CheckSquare,
   Square,
+  X,
 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Card } from '@/components/ui/card';
@@ -43,6 +44,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
+  TableEmptyState,
 } from '@/components/ui/table';
 import {
   DropdownMenu,
@@ -237,194 +240,219 @@ export default function EnquiriesPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const showSkeleton = loading && enquiries.length === 0;
 
+  const activeFilters = [
+    statusFilter !== 'all' && { key: 'status', value: statusFilter, label: statusOptions.find(s => s.value === statusFilter)?.label },
+    modeFilter !== 'all' && { key: 'mode', value: modeFilter, label: modeOptions.find(m => m.value === modeFilter)?.label },
+  ].filter(Boolean) as { key: string; value: string; label: string }[];
+
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="Enquiries"
         description={`${total} enquiries in your workspace`}
+        breadcrumbs={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Enquiries', isCurrent: true },
+        ]}
       >
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <Download className="h-4 w-4" /> Export
-        </Button>
-        <Button size="sm" className="gap-1.5" onClick={handleNew}>
-          <Plus className="h-4 w-4" /> New Enquiry
-        </Button>
+        <div className="hidden items-center gap-2 md:flex">
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <Download className="h-4 w-4" /> Export
+          </Button>
+          <Button size="sm" className="gap-1.5" onClick={handleNew}>
+            <Plus className="h-4 w-4" /> New Enquiry
+          </Button>
+        </div>
       </PageHeader>
 
-      {/* Filters bar */}
-      <Card className="mb-4 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by reference, customer, origin, destination…"
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-[130px]">
-                <Filter className="mr-2 h-3.5 w-3.5" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {statusOptions.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={modeFilter} onValueChange={setModeFilter}>
-              <SelectTrigger className="h-9 w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {modeOptions.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setSortDir('desc'); }}>
-              <SelectTrigger className="h-9 w-[140px]">
-                <ArrowUpDown className="mr-2 h-3.5 w-3.5" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sortFields.map((f) => (
-                  <SelectItem key={f.value} value={f.value}>
-                    {f.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9"
-              onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
-            >
-              <ArrowUpDown className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+      {/* Search & Filters */}
+      <Card className="mb-4">
+        <div className="p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by reference, customer, origin, destination…"
+                className="pl-9 h-10"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-        {/* Bulk actions bar */}
-        {selected.size > 0 && (
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-primary/5 px-4 py-2 animate-slide-up">
-            <span className="text-sm font-medium">
-              {selected.size} selected
-            </span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setSelected(new Set())}>
-                Clear
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-10 w-[150px]">
+                  <Filter className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={modeFilter} onValueChange={setModeFilter}>
+                <SelectTrigger className="h-10 w-[130px]">
+                  <SelectValue placeholder="Mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  {modeOptions.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setSortDir('desc'); }}>
+                <SelectTrigger className="h-10 w-[150px]">
+                  <ArrowUpDown className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortFields.map((f) => (
+                    <SelectItem key={f.value} value={f.value}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+                aria-label={sortDir === 'asc' ? 'Sort descending' : 'Sort ascending'}
+              >
+                <ArrowUpDown className={cn('h-4 w-4 transition-transform', sortDir === 'asc' && 'rotate-180')} />
               </Button>
             </div>
           </div>
-        )}
+
+          {/* Active Filter Badges */}
+          {activeFilters.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Active filters:</span>
+              {activeFilters.map((filter) => (
+                <Badge
+                  key={filter.key}
+                  variant="secondary"
+                  className="gap-1"
+                  onClick={() => {
+                    if (filter.key === 'status') setStatusFilter('all');
+                    if (filter.key === 'mode') setModeFilter('all');
+                  }}
+                >
+                  {filter.label}
+                  <X className="h-3 w-3 cursor-pointer hover:opacity-70" />
+                </Badge>
+              ))}
+              <Button variant="ghost" size="sm" onClick={() => { setStatusFilter('all'); setModeFilter('all'); }}>
+                Clear all
+              </Button>
+            </div>
+          )}
+
+          {/* Bulk actions bar */}
+          {selected.size > 0 && (
+            <div className="mt-3 flex items-center justify-between rounded-lg bg-primary/5 px-4 py-2 animate-slide-up">
+              <span className="text-sm font-medium">
+                {selected.size} selected
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setSelected(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </Card>
 
       {/* Table */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
-          <Table>
+          <Table stickyHeader>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-12">
                   <Checkbox
                     checked={selected.size === enquiries.length && enquiries.length > 0}
                     onCheckedChange={toggleSelectAll}
+                    aria-label="Select all"
                   />
                 </TableHead>
                 <TableHead
                   className="cursor-pointer select-none"
                   onClick={() => toggleSort('reference')}
+                  sortable
                 >
-                  <div className="flex items-center gap-1">
-                    Reference
-                    {sortBy === 'reference' && (
-                      <span className="text-primary">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                    )}
-                  </div>
+                  Reference
                 </TableHead>
                 <TableHead
                   className="cursor-pointer select-none"
                   onClick={() => toggleSort('customer_name')}
+                  sortable
                 >
-                  <div className="flex items-center gap-1">
-                    Customer
-                    {sortBy === 'customer_name' && (
-                      <span className="text-primary">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                    )}
-                  </div>
+                  Customer
                 </TableHead>
                 <TableHead>Route</TableHead>
                 <TableHead>Mode</TableHead>
                 <TableHead
                   className="cursor-pointer select-none"
                   onClick={() => toggleSort('status')}
+                  sortable
                 >
-                  <div className="flex items-center gap-1">
-                    Status
-                    {sortBy === 'status' && (
-                      <span className="text-primary">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                    )}
-                  </div>
+                  Status
                 </TableHead>
                 <TableHead
                   className="cursor-pointer select-none"
                   onClick={() => toggleSort('created_at')}
+                  sortable
                 >
-                  <div className="flex items-center gap-1">
-                    Created
-                    {sortBy === 'created_at' && (
-                      <span className="text-primary">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                    )}
-                  </div>
+                  Created
                 </TableHead>
                 <TableHead className="w-12" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {showSkeleton ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-4" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-8" /></TableCell>
-                  </TableRow>
-                ))
+                <>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-4" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                    </TableRow>
+                  ))}
+                </>
               ) : enquiries.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-64">
-                    <div className="flex flex-col items-center justify-center text-center">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                        <Inbox className="h-8 w-8 text-muted-foreground" />
-                      </div>
-                      <p className="mt-4 text-base font-semibold">No enquiries found</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {search || statusFilter !== 'all' || modeFilter !== 'all'
-                          ? 'Try adjusting your filters or search.'
-                          : 'Create your first enquiry to get started.'}
-                      </p>
-                      <Button className="mt-4 gap-1.5" onClick={handleNew}>
-                        <Plus className="h-4 w-4" /> New Enquiry
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <TableEmptyState
+                  colSpan={8}
+                  icon={<Inbox className="h-8 w-8 text-muted-foreground" />}
+                  title="No enquiries found"
+                  description={
+                    search || statusFilter !== 'all' || modeFilter !== 'all'
+                      ? 'Try adjusting your filters or search.'
+                      : 'Create your first enquiry to get started.'
+                  }
+                  action={
+                    <Button className="gap-1.5" onClick={handleNew}>
+                      <Plus className="h-4 w-4" /> New Enquiry
+                    </Button>
+                  }
+                />
               ) : (
                 enquiries.map((e) => {
                   const ModeIcon = modeIcons[e.mode] ?? Ship;
@@ -437,6 +465,7 @@ export default function EnquiriesPage() {
                         isSelected ? 'bg-primary/5' : 'hover:bg-muted/40'
                       )}
                       onClick={() => handleRowClick(e)}
+                      selected={isSelected}
                     >
                       <TableCell onClick={(ev) => ev.stopPropagation()}>
                         <Checkbox
@@ -462,7 +491,7 @@ export default function EnquiriesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge status={e.status} />
+                        <StatusBadge status={e.status} size="md" />
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {new Date(e.created_at).toLocaleDateString()}
@@ -501,32 +530,16 @@ export default function EnquiriesPage() {
 
         {/* Pagination */}
         {enquiries.length > 0 && (
-          <div className="flex items-center justify-between border-t border-border px-4 py-3">
-            <p className="text-sm text-muted-foreground">
-              Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 0}
-                onClick={() => setPage(page - 1)}
-              >
-                <ChevronLeft className="h-4 w-4" /> Prev
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {page + 1} / {totalPages || 1}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage(page + 1)}
-              >
-                Next <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+          <TablePagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={total}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            showPageSize
+            pageSizeOptions={[10, 25, 50, 100]}
+            onPageSizeChange={(size) => { /* handle page size change */ }}
+          />
         )}
       </Card>
 

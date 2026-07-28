@@ -16,6 +16,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
 } from '@/components/ui/table';
 import { supabase } from '@/lib/supabase';
 import type { Shipment } from '@/lib/supabase';
@@ -27,25 +28,45 @@ const modeIcons: Record<string, typeof Plane> = {
   rail: Train,
 };
 
+const PAGE_SIZE = 10;
+
 export default function ShipmentsPage() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    let query = supabase.from('shipments').select('*').order('created_at', { ascending: false });
-    if (search) {
-      query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%,origin.ilike.%${search}%,destination.ilike.%${search}%`);
-    }
-    query.then(({ data }) => {
-      setShipments(data ?? []);
+    const fetchShipments = async () => {
+      setLoading(true);
+      let query = supabase
+        .from('shipments')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false });
+      if (search) {
+        query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%,origin.ilike.%${search}%,destination.ilike.%${search}%`);
+      }
+      query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      
+      const { data, count, error } = await query;
+      if (error) {
+        console.error(error);
+      } else {
+        setShipments(data ?? []);
+        setTotal(count ?? 0);
+      }
       setLoading(false);
-    });
-  }, [search]);
+    };
+    fetchShipments();
+  }, [search, page]);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const showSkeleton = loading && shipments.length === 0;
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Shipments" description={`${shipments.length} shipments`}>
+      <PageHeader title="Shipments" description={`${total} shipments`}>
         <Button variant="outline" size="sm" className="gap-1.5">
           <Download className="h-4 w-4" /> Export
         </Button>
@@ -68,8 +89,8 @@ export default function ShipmentsPage() {
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
-          <Table>
-            <TableHeader>
+          <Table stickyHeader>
+            <TableHeader sticky>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Reference</TableHead>
                 <TableHead>Customer</TableHead>
@@ -82,7 +103,7 @@ export default function ShipmentsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {showSkeleton ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -144,6 +165,16 @@ export default function ShipmentsPage() {
             </TableBody>
           </Table>
         </div>
+
+        {shipments.length > 0 && (
+          <TablePagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={total}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
+        )}
       </Card>
     </div>
   );

@@ -1,6 +1,7 @@
+'use client';
+
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
-
 import { cn } from '@/lib/utils';
 import { ButtonProps, buttonVariants } from '@/components/ui/button';
 
@@ -52,7 +53,7 @@ const PaginationLink = ({
         variant: isActive ? 'outline' : 'ghost',
         size,
       }),
-      className
+      className,
     )}
     {...props}
   />
@@ -61,13 +62,16 @@ PaginationLink.displayName = 'PaginationLink';
 
 const PaginationPrevious = ({
   className,
+  disabled,
   ...props
-}: React.ComponentProps<typeof PaginationLink>) => (
+}: React.ComponentProps<typeof PaginationLink> & { disabled?: boolean }) => (
   <PaginationLink
     aria-label="Go to previous page"
     size="default"
     className={cn('gap-1 pl-2.5', className)}
     {...props}
+    onClick={disabled ? undefined : props.onClick}
+    style={{ pointerEvents: disabled ? 'none' : undefined, opacity: disabled ? 0.5 : 1 }}
   >
     <ChevronLeft className="h-4 w-4" />
     <span>Previous</span>
@@ -77,13 +81,16 @@ PaginationPrevious.displayName = 'PaginationPrevious';
 
 const PaginationNext = ({
   className,
+  disabled,
   ...props
-}: React.ComponentProps<typeof PaginationLink>) => (
+}: React.ComponentProps<typeof PaginationLink> & { disabled?: boolean }) => (
   <PaginationLink
     aria-label="Go to next page"
     size="default"
     className={cn('gap-1 pr-2.5', className)}
     {...props}
+    onClick={disabled ? undefined : props.onClick}
+    style={{ pointerEvents: disabled ? 'none' : undefined, opacity: disabled ? 0.5 : 1 }}
   >
     <span>Next</span>
     <ChevronRight className="h-4 w-4" />

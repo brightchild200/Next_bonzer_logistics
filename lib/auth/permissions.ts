@@ -27,6 +27,7 @@ export const PERMISSIONS = {
   ENQUIRY: {
     CREATE: 'enquiry:create',
     READ: 'enquiry:read',
+    READ_OWN: 'enquiry:read_own',
     UPDATE: 'enquiry:update',
     ASSIGN: 'enquiry:assign',
     CONVERT: 'enquiry:convert',
@@ -34,6 +35,7 @@ export const PERMISSIONS = {
   INTERACTION: {
     CREATE: 'interaction:create',
     READ_ALL: 'interaction:read_all',
+    READ_OWN: 'interaction:read_own',
     UPDATE: 'interaction:update',
     DEACTIVATE: 'interaction:deactivate',
   },

@@ -95,13 +95,16 @@ for (const ur of userRolesData ?? []) {
 
   rolesByUserId.set(ur.user_id, existing);
 }
-  // NOTE: keep employee listing independent from Admin auth user listing.
-  // Some environments/contexts may not allow listing auth users during page rendering.
-  // Email is optional for the Team UI.
+  const { data: authUsers } = await adminClient.auth.admin.listUsers();
+  const emailById = new Map<string, string>();
+  for (const u of authUsers?.users ?? []) {
+    if (u.email) emailById.set(u.id, u.email);
+  }
+
   const employees: Employee[] = profiles.map((p) => ({
     id: p.id,
     full_name: p.full_name,
-    email: null,
+    email: emailById.get(p.id) ?? null,
     employee_code: p.employee_code,
     phone: p.phone,
     is_active: p.is_active,

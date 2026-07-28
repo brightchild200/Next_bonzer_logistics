@@ -22,7 +22,15 @@ ALTER TABLE public.enquiries
     ADD COLUMN IF NOT EXISTS won_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS lost_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS closed_by UUID;
+    ADD COLUMN IF NOT EXISTS closed_by UUID,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+-- Attach shared updated_at trigger
+DROP TRIGGER IF EXISTS enquiries_set_updated_at ON public.enquiries;
+CREATE TRIGGER enquiries_set_updated_at
+    BEFORE UPDATE ON public.enquiries
+    FOR EACH ROW
+    EXECUTE FUNCTION public.set_updated_at();
 
 DO $$
 BEGIN
@@ -80,9 +88,6 @@ CREATE INDEX IF NOT EXISTS idx_enquiries_assigned_customer_service_status
 
 CREATE INDEX IF NOT EXISTS idx_enquiries_assigned_customer_service_updated_at
     ON public.enquiries(assigned_customer_service_id, updated_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_enquiries_owner_status
-    ON public.enquiries(owner_id, status);
 
 -- ============================================================================
 -- CUSTOMER INTERACTIONS: enforce one enquiry per interaction

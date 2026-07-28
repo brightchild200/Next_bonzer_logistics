@@ -1,49 +1,35 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Search,
-  X,
-  Loader2,
-  AlertCircle,
-  ChevronDown,
-  User,
-  MessageSquare,
-  Flag,
   Calendar,
-  Clock,
+  Loader2,
   FileText,
+  Mail,
+  MessageSquare,
+  Phone,
+  User,
+  X,
+  Briefcase,
+  Send,
 } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormDescription,
-  FormMessage,
-} from '@/components/ui/form';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { searchCustomers } from '@/lib/actions/customer-interactions/queries/search-customers';
-import { createInteraction } from '@/lib/actions/customer-interactions/mutations/create-interaction';
-import { listEmployeesForFilter } from '@/lib/actions/customer-interactions/queries/list-employees-for-filter';
-import type { InteractionType, InteractionOutcome } from '@/lib/actions/customer-interactions/types';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Form, FormField, FormItem, FormControl, FormMessage, FormLabel } from '@/components/ui/form';
 import { cn } from '@/lib/utils';
+import { createCustomer } from '@/lib/actions/customers/create-customer';
+import { createInteraction } from '@/lib/actions/customer-interactions/mutations/create-interaction';
+import type { InteractionOutcome, InteractionType } from '@/lib/actions/customer-interactions/types';
+import type { CustomerInput } from '@/lib/actions/customers/types';
 
 interface EmployeeOption {
   id: string;
@@ -58,27 +44,27 @@ interface CreateInteractionFormProps {
 }
 
 const createInteractionSchema = z.object({
-  customerId: z.string().min(1, 'Customer is required'),
   employeeId: z.string().min(1, 'Employee is required'),
   interactionTypeId: z.string().min(1, 'Interaction type is required'),
   interactionOutcomeId: z.string().min(1, 'Outcome is required'),
   subject: z.string().max(255).optional(),
   notes: z.string().min(1, 'Notes are required'),
   interactionAt: z.string().min(1, 'Date and time is required'),
+  contactPersonName: z.string().min(1, 'Contact person name is required').max(255),
+  contactPersonMobile: z.string().min(1, 'Contact person mobile is required').max(50),
+  contactPersonEmail: z.string().email('Invalid email format').max(255).nullable().optional(),
+  contactPersonDesignation: z.string().max(255).nullable().optional(),
+  interactionChannel: z.enum(['CALL', 'VISIT', 'WHATSAPP', 'EMAIL', 'MEETING', 'VIDEO_CALL']),
+  interactionDurationMinutes: z.number().int().min(0).nullable().optional(),
 });
 
 type CreateInteractionFormData = z.infer<typeof createInteractionSchema>;
 
-interface CustomerSearchResult {
-  customerId: string;
-  customerRef: string;
-  companyName: string;
-  city: string | null;
-  state: string | null;
-  contactPerson: string | null;
-  mobile: string | null;
-  email: string | null;
-}
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[(]?[0-9]{1,3}[)]?[-\s\.]?[0-9]{4,6}$/;
+const PINCODE_REGEX = /^[0-9]{6}$/;
 
 export function CreateInteractionForm({
   interactionTypes,
@@ -88,80 +74,124 @@ export function CreateInteractionForm({
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(null);
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [customerResults, setCustomerResults] = useState<CustomerSearchResult[]>([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [employees, setEmployees] = useState<EmployeeOption[]>(initialEmployees);
+  const [employees] = useState<EmployeeOption[]>(initialEmployees);
+  const [customerForm, setCustomerForm] = useState<CustomerInput>({
+    company_name: '',
+    contact_person: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    state: '',
+    country: 'India',
+    pincode: '',
+    gst_number: '',
+    pan_number: '',
+  });
+  const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof CustomerInput, string>>>({});
 
   const form = useForm<CreateInteractionFormData>({
     resolver: zodResolver(createInteractionSchema),
     defaultValues: {
-      customerId: '',
       employeeId: '',
       interactionTypeId: '',
       interactionOutcomeId: '',
       subject: '',
       notes: '',
       interactionAt: new Date().toISOString().slice(0, 16),
+      interactionChannel: 'CALL',
     },
   });
 
-  const handleCustomerSearch = useCallback(async (query: string) => {
-    setCustomerSearch(query);
-    if (!query.trim()) {
-      setCustomerResults([]);
-      setShowCustomerDropdown(false);
-      return;
+  function updateCustomerForm(field: keyof CustomerInput, value: string | boolean) {
+    setCustomerForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setCustomerErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
+  function validateCustomerForm(): boolean {
+    const errors: Partial<Record<keyof CustomerInput, string>> = {};
+
+    if (!customerForm.company_name.trim()) {
+      errors.company_name = 'Company name is required';
     }
 
-    try {
-      const result = await searchCustomers(query, 10);
-      if (result.success) {
-        setCustomerResults(result.customers);
-        setShowCustomerDropdown(true);
+    if (customerForm.email && !EMAIL_REGEX.test(customerForm.email)) {
+      errors.email = 'Invalid email format';
+    }
+
+    if (customerForm.phone) {
+      const digits = customerForm.phone.replace(/\D/g, '');
+      if (!PHONE_REGEX.test(customerForm.phone) || digits.length < 10 || digits.length > 15) {
+        errors.phone = 'Invalid phone number. Expected 10-15 digits';
       }
-    } catch {
-      setCustomerResults([]);
     }
-  }, []);
 
-  const selectCustomer = (customer: CustomerSearchResult) => {
-    setSelectedCustomer(customer);
-    setCustomerSearch(`${customer.companyName} (${customer.customerRef})`);
-    setCustomerResults([]);
-    setShowCustomerDropdown(false);
-    form.setValue('customerId', customer.customerId, { shouldValidate: true });
-  };
+    if (customerForm.pan_number && !PAN_REGEX.test(customerForm.pan_number.toUpperCase())) {
+      errors.pan_number = 'Invalid PAN format. Expected: AAAAA9999A';
+    }
 
-  const clearCustomer = () => {
-    setSelectedCustomer(null);
-    setCustomerSearch('');
-    setCustomerResults([]);
-    form.setValue('customerId', '', { shouldValidate: true });
-  };
+    if (customerForm.gst_number && !GSTIN_REGEX.test(customerForm.gst_number.toUpperCase())) {
+      errors.gst_number = 'Invalid GSTIN format. Expected 15-character GSTIN';
+    }
+
+    if (customerForm.pan_number && customerForm.gst_number) {
+      const panUpper = customerForm.pan_number.toUpperCase();
+      const gstUpper = customerForm.gst_number.toUpperCase();
+      if (gstUpper.substring(2, 12) !== panUpper) {
+        errors.pan_number = 'PAN in GSTIN (positions 3-12) does not match provided PAN';
+        errors.gst_number = 'PAN in GSTIN (positions 3-12) does not match provided PAN';
+      }
+    }
+
+    if (customerForm.pincode && !PINCODE_REGEX.test(customerForm.pincode)) {
+      errors.pincode = 'Invalid pincode. Expected 6 digits';
+    }
+
+    setCustomerErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   const handleSubmit = async (data: CreateInteractionFormData) => {
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
+      if (!validateCustomerForm()) {
+        return;
+      }
+
+      const customerResult = await createCustomer(customerForm);
+      if (!customerResult.success) {
+        setSubmitError(customerResult.error);
+        return;
+      }
+
       const result = await createInteraction({
-        customerId: data.customerId,
+        customerId: customerResult.customer.id,
         employeeId: data.employeeId,
         interactionTypeId: data.interactionTypeId,
         interactionOutcomeId: data.interactionOutcomeId,
         subject: data.subject || null,
         notes: data.notes,
         interactionAt: data.interactionAt,
+        contactPersonName: data.contactPersonName,
+        contactPersonMobile: data.contactPersonMobile,
+        contactPersonEmail: data.contactPersonEmail || null,
+        contactPersonDesignation: data.contactPersonDesignation || null,
+        interactionChannel: data.interactionChannel,
+        interactionDurationMinutes: data.interactionDurationMinutes ?? null,
       });
 
       if (result.success) {
         router.push(`/customer-interactions/${result.interaction.id}`);
         router.refresh();
-      } else {
-        setSubmitError(result.error);
+        return;
       }
+
+      setSubmitError(result.error);
     } catch {
       setSubmitError('Failed to create interaction');
     } finally {
@@ -170,13 +200,11 @@ export function CreateInteractionForm({
   };
 
   return (
-    <div className="max-w-3xl mx-auto animate-fade-in">
+    <div className="w-full max-w-none animate-fade-in">
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">New Interaction</h1>
-          <p className="mt-1 text-muted-foreground">
-            Record a new customer interaction
-          </p>
+          <p className="mt-1 text-muted-foreground">Record a new customer interaction</p>
         </div>
         <Button variant="outline" onClick={() => router.back()}>
           <X className="mr-2 h-4 w-4" />
@@ -186,81 +214,77 @@ export function CreateInteractionForm({
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-          {/* Customer Search */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
-                Customer
+                Customer Details
               </CardTitle>
-              <CardDescription>Search and select a customer</CardDescription>
+              <CardDescription>
+                Enter the customer directly here. A new customer master record will be created before the interaction is saved.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <FormField
-                control={form.control}
-                name="customerId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          placeholder="Search by name, reference, contact, email, phone, GST, PAN…"
-                          className="pl-9 pr-9"
-                          value={customerSearch}
-                          onChange={(e) => {
-                            field.onChange(e.target.value);
-                            handleCustomerSearch(e.target.value);
-                          }}
-                          onFocus={() => {
-                            if (customerResults.length > 0) setShowCustomerDropdown(true);
-                          }}
-                          onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                          disabled={isSubmitting}
-                        />
-                        {selectedCustomer && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
-                            onClick={clearCustomer}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </FormControl>
-                    {showCustomerDropdown && customerResults.length > 0 && (
-                      <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-md border bg-popover p-1 shadow-lg">
-                        {customerResults.map((customer) => (
-                          <Button
-                            key={customer.customerId}
-                            type="button"
-                            variant="ghost"
-                            className="w-full justify-start gap-3 p-2 hover:bg-accent"
-                            onClick={() => selectCustomer(customer)}
-                          >
-                            <div className="flex-1 text-left">
-                              <p className="font-medium">{customer.companyName}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {customer.customerRef} • {customer.contactPerson || 'No contact'}
-                                {customer.city && ` • ${customer.city}`}
-                                {customer.state && `, ${customer.state}`}
-                              </p>
-                            </div>
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="company_name">Company Name *</Label>
+                <Input
+                  id="company_name"
+                  value={customerForm.company_name}
+                  onChange={(event) => updateCustomerForm('company_name', event.target.value)}
+                  placeholder="Company name"
+                  disabled={isSubmitting}
+                  className={customerErrors.company_name ? 'border-destructive' : ''}
+                />
+                {customerErrors.company_name && <p className="text-sm text-destructive">{customerErrors.company_name}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact_person">Contact Person</Label>
+                <Input id="contact_person" value={customerForm.contact_person ?? ''} onChange={(event) => updateCustomerForm('contact_person', event.target.value)} placeholder="Contact person" disabled={isSubmitting} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input id="phone" value={customerForm.phone ?? ''} onChange={(event) => updateCustomerForm('phone', event.target.value)} placeholder="Phone number" disabled={isSubmitting} className={customerErrors.phone ? 'border-destructive' : ''} />
+                {customerErrors.phone && <p className="text-sm text-destructive">{customerErrors.phone}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" type="email" value={customerForm.email ?? ''} onChange={(event) => updateCustomerForm('email', event.target.value)} placeholder="customer@company.com" disabled={isSubmitting} className={customerErrors.email ? 'border-destructive' : ''} />
+                {customerErrors.email && <p className="text-sm text-destructive">{customerErrors.email}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gst_number">GST Number</Label>
+                <Input id="gst_number" value={customerForm.gst_number ?? ''} onChange={(event) => updateCustomerForm('gst_number', event.target.value.toUpperCase())} placeholder="27ABCDE1234F1Z5" disabled={isSubmitting} className={customerErrors.gst_number ? 'border-destructive' : ''} />
+                {customerErrors.gst_number && <p className="text-sm text-destructive">{customerErrors.gst_number}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pan_number">PAN Number</Label>
+                <Input id="pan_number" value={customerForm.pan_number ?? ''} onChange={(event) => updateCustomerForm('pan_number', event.target.value.toUpperCase())} placeholder="ABCDE1234F" disabled={isSubmitting} className={customerErrors.pan_number ? 'border-destructive' : ''} />
+                {customerErrors.pan_number && <p className="text-sm text-destructive">{customerErrors.pan_number}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pincode">Pincode</Label>
+                <Input id="pincode" value={customerForm.pincode ?? ''} onChange={(event) => updateCustomerForm('pincode', event.target.value)} placeholder="400001" disabled={isSubmitting} className={customerErrors.pincode ? 'border-destructive' : ''} />
+                {customerErrors.pincode && <p className="text-sm text-destructive">{customerErrors.pincode}</p>}
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address">Address</Label>
+                <Textarea id="address" value={customerForm.address ?? ''} onChange={(event) => updateCustomerForm('address', event.target.value)} placeholder="Business address" disabled={isSubmitting} rows={3} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city">City</Label>
+                <Input id="city" value={customerForm.city ?? ''} onChange={(event) => updateCustomerForm('city', event.target.value)} placeholder="Mumbai" disabled={isSubmitting} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="state">State</Label>
+                <Input id="state" value={customerForm.state ?? ''} onChange={(event) => updateCustomerForm('state', event.target.value)} placeholder="Maharashtra" disabled={isSubmitting} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="country">Country</Label>
+                <Input id="country" value={customerForm.country ?? ''} onChange={(event) => updateCustomerForm('country', event.target.value)} placeholder="India" disabled={isSubmitting} />
+              </div>
             </CardContent>
           </Card>
 
-          {/* Interaction Details Grid */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -270,11 +294,10 @@ export function CreateInteractionForm({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                {/* Employee */}
                 <FormField
                   control={form.control}
                   name="employeeId"
-                  render={({ field , fieldState}) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Employee</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -284,7 +307,6 @@ export function CreateInteractionForm({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="" disabled>Select employee</SelectItem>
                           {employees.map((emp) => (
                             <SelectItem key={emp.id} value={emp.id}>
                               {emp.fullName} {emp.employeeCode && `(${emp.employeeCode})`}
@@ -297,7 +319,6 @@ export function CreateInteractionForm({
                   )}
                 />
 
-                {/* Interaction Type */}
                 <FormField
                   control={form.control}
                   name="interactionTypeId"
@@ -311,7 +332,6 @@ export function CreateInteractionForm({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="" disabled>Select type</SelectItem>
                           {interactionTypes.map((type) => (
                             <SelectItem key={type.id} value={type.id}>
                               {type.name}
@@ -324,7 +344,6 @@ export function CreateInteractionForm({
                   )}
                 />
 
-                {/* Outcome */}
                 <FormField
                   control={form.control}
                   name="interactionOutcomeId"
@@ -338,7 +357,6 @@ export function CreateInteractionForm({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="" disabled>Select outcome</SelectItem>
                           {interactionOutcomes.map((outcome) => (
                             <SelectItem key={outcome.id} value={outcome.id}>
                               {outcome.name}
@@ -351,7 +369,6 @@ export function CreateInteractionForm({
                   )}
                 />
 
-                {/* Date/Time */}
                 <FormField
                   control={form.control}
                   name="interactionAt"
@@ -373,20 +390,21 @@ export function CreateInteractionForm({
                     </FormItem>
                   )}
                 />
+              </div>
 
-                {/* Subject */}
+              <div className="grid gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="subject"
+                  name="contactPersonName"
                   render={({ field, fieldState }) => (
-                    <FormItem className="md:col-span-2">
+                    <FormItem>
                       <FormLabel className="flex items-center gap-1.5">
-                        <FileText className="h-4 w-4" />
-                        Subject (optional)
+                        <User className="h-4 w-4" />
+                        Contact Person Name <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Brief subject line"
+                          placeholder="Contact person name"
                           maxLength={255}
                           className={cn(fieldState.invalid && 'border-destructive')}
                           {...field}
@@ -398,62 +416,203 @@ export function CreateInteractionForm({
                   )}
                 />
 
-                {/* Notes */}
                 <FormField
                   control={form.control}
-                  name="notes"
+                  name="contactPersonMobile"
                   render={({ field, fieldState }) => (
-                    <FormItem className="md:col-span-2">
+                    <FormItem>
                       <FormLabel className="flex items-center gap-1.5">
-                        <FileText className="h-4 w-4" />
-                        Notes <span className="text-destructive">*</span>
+                        <Phone className="h-4 w-4" />
+                        Contact Person Mobile <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Textarea
-                          placeholder="Record the details of this interaction…"
-                          className={cn('min-h-[120px] resize-y', fieldState.invalid && 'border-destructive')}
+                        <Input
+                          placeholder="Contact mobile number"
+                          type="tel"
+                          maxLength={50}
+                          className={cn(fieldState.invalid && 'border-destructive')}
                           {...field}
                           disabled={isSubmitting}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Required. Include key discussion points, commitments, and next steps.
-                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="contactPersonEmail"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Mail className="h-4 w-4" />
+                        Contact Person Email (optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="contact@company.com"
+                          type="email"
+                          maxLength={255}
+                          className={cn(fieldState.invalid && 'border-destructive')}
+                          value={field.value ?? ''}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          onBlur={field.onBlur}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="contactPersonDesignation"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Briefcase className="h-4 w-4" />
+                        Contact Person Designation (optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., Procurement Manager"
+                          maxLength={255}
+                          className={cn(fieldState.invalid && 'border-destructive')}
+                          value={field.value ?? ''}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          onBlur={field.onBlur}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="interactionChannel"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Send className="h-4 w-4" />
+                        Interaction Channel <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <SelectTrigger className={cn(fieldState.invalid && 'border-destructive')}>
+                            <SelectValue placeholder="Select channel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="CALL">Call</SelectItem>
+                            <SelectItem value="VISIT">Visit</SelectItem>
+                            <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                            <SelectItem value="EMAIL">Email</SelectItem>
+                            <SelectItem value="MEETING">Meeting</SelectItem>
+                            <SelectItem value="VIDEO_CALL">Video Call</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="interactionDurationMinutes"
+                  render={({ field, fieldState }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <span className="inline-flex h-4 w-4 items-center justify-center text-sm">⏱</span>
+                        Duration (minutes, optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="30"
+                          className={cn(fieldState.invalid && 'border-destructive')}
+                          value={field.value ?? ''}
+                          onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
+                          onBlur={field.onBlur}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="subject"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5">
+                      <FileText className="h-4 w-4" />
+                      Subject
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Short summary of the interaction"
+                        maxLength={255}
+                        value={field.value ?? ''}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        onBlur={field.onBlur}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="notes"
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Interaction notes"
+                        rows={5}
+                        className={cn(fieldState.invalid && 'border-destructive')}
+                        {...field}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 
-          {/* Submit Error */}
           {submitError && (
-            <Card className="border-destructive bg-destructive/5">
-              <CardContent className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                <p>{submitError}</p>
-              </CardContent>
-            </Card>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              {submitError}
+            </div>
           )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 border-t pt-4">
+          <div className="flex items-center justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
-              <X className="mr-2 h-4 w-4" />
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="gap-2">
+            <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating…
+                  Saving...
                 </>
               ) : (
-                <>
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Create Interaction
-                </>
+                'Create Interaction'
               )}
             </Button>
           </div>

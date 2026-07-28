@@ -40,27 +40,28 @@ export async function adminResetPassword(userId: string): Promise<AdminResetPass
     return { success: false, error: 'You cannot reset your own password this way' };
   }
 
-  // Get user email from profiles or auth
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .eq('id', userId)
-    .maybeSingle();
+  const adminClient = createAdminClient();
 
-  if (profileError || !profile) {
+  console.log("Reset userId:", userId);
+  
+  // Resolve the auth user first so password resets still work even if the profile row is missing.
+  const { data: authUser, error: authUserError } = await adminClient.auth.admin.getUserById(userId);
+
+  if (authUserError || !authUser.user) {
     return { success: false, error: 'Employee not found' };
   }
 
-  const adminClient = createAdminClient();
-
-  // Get the user's email from auth
-  const { data: authUser, error: authUserError } = await adminClient.auth.admin.getUserById(userId);
-
-  if (authUserError || !authUser.user?.email) {
+  if (!authUser.user.email) {
     return { success: false, error: 'Failed to retrieve user email' };
   }
 
   const email = authUser.user.email;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', userId)
+    .maybeSingle();
 
   // Generate password reset link
   const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
@@ -71,6 +72,8 @@ export async function adminResetPassword(userId: string): Promise<AdminResetPass
     },
   });
 
+  console.log(authUserError);
+console.log(authUser);
   if (linkError || !linkData?.properties?.action_link) {
     return { success: false, error: linkError?.message ?? 'Failed to generate reset link' };
   }
@@ -78,7 +81,7 @@ export async function adminResetPassword(userId: string): Promise<AdminResetPass
   // In a real app, you'd send this via your email service
   // For now, we'll just return success - the link would be emailed
   // The admin could also copy the link manually if needed
-  console.log(`Password reset link for ${profile.full_name} (${email}):`, linkData.properties.action_link);
+  console.log(`Password reset link for ${profile?.full_name ?? email} (${email}):`, linkData.properties.action_link);
 
   return { success: true };
 }

@@ -65,6 +65,8 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[(]?[0-9]{1,3}[)]?[-\s\.]?[0-9]{4,6}$/;
 const PINCODE_REGEX = /^[0-9]{6}$/;
 
+
+
 function validatePanFormat(pan: string | undefined): string | null {
   if (!pan) return null;
   const upper = pan.toUpperCase();
@@ -131,6 +133,7 @@ export function CustomerWorkspace() {
   const [isSearching, setIsSearching] = useState(false);
   const [sortBy, setSortBy] = useState<'company_name' | 'customer_ref' | 'city' | 'state' | 'kyc_status' | 'created_at'>('company_name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const toggleSort = (field: typeof sortBy) => {
     if (sortBy === field) {
@@ -203,7 +206,7 @@ export function CustomerWorkspace() {
   };
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);

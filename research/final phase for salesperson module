@@ -1301,3 +1301,92 @@ Before building **Pricing**, spend a little time talking to Bonzer's operations 
 * Which documents are mandatory at each stage.
 
 Those decisions have a big impact on the schema and workflow. Spending a few hours validating them now can save a lot of rework later.
+
+
+docs/
+│
+├── README.md                      ← Entry point
+│
+├── 01_Project/
+│   ├── Project_Vision.md
+│   ├── Tech_Stack.md
+│   ├── Folder_Structure.md
+│   ├── Coding_Guidelines.md
+│   └── Architecture_Principles.md
+│
+├── 02_Architecture/
+│   ├── System_Architecture.md
+│   ├── Platform_Architecture.md
+│   ├── Database_Architecture.md
+│   ├── Authentication.md
+│   ├── RBAC.md
+│   └── UI_Architecture.md
+│
+├── 03_Phases/
+│   ├── Phase1_RBAC.md
+│   ├── Phase2_CRM.md
+│   ├── Phase3_UI.md
+│   ├── Phase4_Production.md
+│   └── Phase5_Sales.md
+│
+├── 04_Milestones/
+│   ├── Milestone1.md
+│   ├── Milestone2.md
+│   ├── Milestone3.md
+│   ├── Milestone4.md
+│   └── Milestone5.md
+│
+├── 05_Workflows/
+│   ├── Customer.md
+│   ├── Interaction.md
+│   ├── Followup.md
+│   ├── Enquiry.md
+│   ├── Pricing.md
+│   ├── Quotation.md
+│   └── Job.md
+│
+├── 06_UI/
+│   ├── Design_System.md
+│   ├── Components.md
+│   ├── Tables.md
+│   ├── Forms.md
+│   ├── Dialogs.md
+│   ├── Typography.md
+│   ├── Colours.md
+│   └── Responsive.md
+│
+├── 07_Database/
+│   ├── Tables.md
+│   ├── Relationships.md
+│   ├── Migrations.md
+│   └── RLS.md
+│
+├── 08_API/
+│   ├── Server_Actions.md
+│   ├── Permissions.md
+│   └── Validation.md
+│
+├── 09_Audits/
+│   ├── UI_Audit_001.md
+│   ├── Security_Audit.md
+│   ├── Performance_Audit.md
+│   └── Production_Checklist.md
+│
+├── 10_Research/
+│   ├── ERP_Research.md
+│   ├── Logistics.md
+│   ├── Competitors.md
+│   └── References.md
+│
+├── 11_Decisions/
+│   ├── ADR-001.md
+│   ├── ADR-002.md
+│   └── ADR-003.md
+│
+├── 12_Roadmap/
+│   ├── Current_Status.md
+│   ├── TODO.md
+│   ├── Backlog.md
+│   └── Future.md
+│
+└── CHANGELOG.md

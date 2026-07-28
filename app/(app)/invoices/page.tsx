@@ -15,29 +15,50 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TablePagination,
 } from '@/components/ui/table';
 import { supabase } from '@/lib/supabase';
 import type { Invoice } from '@/lib/supabase';
+
+const PAGE_SIZE = 10;
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    let query = supabase.from('invoices').select('*').order('created_at', { ascending: false });
-    if (search) {
-      query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%`);
-    }
-    query.then(({ data }) => {
-      setInvoices(data ?? []);
+    const fetchInvoices = async () => {
+      setLoading(true);
+      let query = supabase
+        .from('invoices')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false });
+      if (search) {
+        query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%`);
+      }
+      query = query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      
+      const { data, count, error } = await query;
+      if (error) {
+        console.error(error);
+      } else {
+        setInvoices(data ?? []);
+        setTotal(count ?? 0);
+      }
       setLoading(false);
-    });
-  }, [search]);
+    };
+    fetchInvoices();
+  }, [search, page]);
 
   const totalAmount = invoices.reduce((sum, i) => sum + (i.amount || 0), 0);
   const paidAmount = invoices.filter((i) => i.status === 'paid').reduce((sum, i) => sum + (i.amount || 0), 0);
   const overdueAmount = invoices.filter((i) => i.status === 'overdue').reduce((sum, i) => sum + (i.amount || 0), 0);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const showSkeleton = loading && invoices.length === 0;
 
   return (
     <div className="animate-fade-in">
@@ -78,8 +99,8 @@ export default function InvoicesPage() {
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin">
-          <Table>
-            <TableHeader>
+          <Table stickyHeader>
+            <TableHeader sticky>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Reference</TableHead>
                 <TableHead>Customer</TableHead>
@@ -90,7 +111,7 @@ export default function InvoicesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {showSkeleton ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -136,6 +157,16 @@ export default function InvoicesPage() {
             </TableBody>
           </Table>
         </div>
+
+        {invoices.length > 0 && (
+          <TablePagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={total}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
+        )}
       </Card>
     </div>
   );
