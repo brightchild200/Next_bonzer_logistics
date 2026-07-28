@@ -1,131 +1,53 @@
-'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Eye, EyeOff, Mail, Lock, Loader2, Github, Chrome } from 'lucide-react';
-import { AuthShell } from '@/components/auth-shell';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
+
+// app/(auth)/login/page.tsx
+import { AnimatedBackground } from '@/components/auth/AnimatedBackground';
+import { LoginForm } from '@/components/auth/LoginForm';
+
+
+export const metadata = {
+  title: 'Sign in - Bonzer Logistics',
+  description: 'Operations portal login',
+};
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      toast.error(error.message);
-      setLoading(false);
-      return;
-    }
-    toast.success('Welcome back to Bonzer');
-    router.push('/dashboard');
-  };
-
   return (
-    <AuthShell title="Welcome back" subtitle="Sign in to your Bonzer ERP workspace.">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@company.com"
-              className="pl-9"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-white">
+      {/* ========================================================
+          LEFT SIDE - ANIMATED BACKGROUND
+          Hidden on mobile, visible on lg+ screens
+          ======================================================== */}
+      <div className="hidden lg:block relative overflow-hidden bg-gradient-to-br from-[#050d1a] via-[#0f1c2e] to-[#051829]">
+        <AnimatedBackground />
+
+        {/* Optional: Overlay gradient */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/5 pointer-events-none" />
+      </div>
+
+      {/* ========================================================
+          RIGHT SIDE - LOGIN FORM
+          Takes full width on mobile, half on desktop
+          ======================================================== */}
+      <div className="flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12 lg:py-0">
+        <div className="w-full max-w-md">
+          <LoginForm />
+
+          {/* Optional: Branding at bottom on mobile */}
+          <div className="lg:hidden mt-8 pt-8 border-t border-gray-200 text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                <span className="text-white text-sm font-bold">🚚</span>
+              </div>
+              <span className="text-lg font-bold text-gray-900">
+                Bonzer<span className="text-orange-500">.</span>
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 uppercase tracking-widest">
+              Logistics Platform
+            </p>
           </div>
         </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <Link
-              href="/forgot-password"
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              Forgot password?
-            </Link>
-          </div>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Enter your password"
-              className="pl-9 pr-9"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Checkbox id="remember" />
-          <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">
-            Remember me for 30 days
-          </Label>
-        </div>
-
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in…
-            </>
-          ) : (
-            'Sign in'
-          )}
-        </Button>
-
-        <div className="relative py-2">
-          <Separator />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-3 text-xs text-muted-foreground">
-            or continue with
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Button type="button" variant="outline" disabled>
-            <Github className="mr-2 h-4 w-4" /> GitHub
-          </Button>
-          <Button type="button" variant="outline" disabled>
-            <Chrome className="mr-2 h-4 w-4" /> Google
-          </Button>
-        </div>
-
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
-          <Link href="/signup" className="font-medium text-primary hover:underline">
-            Create one
-          </Link>
-        </p>
-      </form>
-    </AuthShell>
+      </div>
+    </div>
   );
 }

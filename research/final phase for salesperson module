@@ -1,0 +1,1303 @@
+Yes. Based on **everything we've discussed over the last few weeks** (roles, CRM workflow, customer master, enquiry flow, pricing, jobs, notifications, etc.), this is the roadmap I would follow. I would **not** change it anymore unless your business process changes.
+
+---
+
+# BONZER LOGISTICS ERP ROADMAP
+
+```text
+Platform (Completed)
+        │
+        ▼
+Sales CRM
+        │
+        ▼
+Customer Service
+        │
+        ▼
+Pricing
+        │
+        ▼
+Operations
+        │
+        ▼
+Accounts
+        │
+        ▼
+Reports
+```
+
+---
+
+# PHASE 1 — Identity & RBAC ✅ DONE
+
+Goal
+
+Build ERP foundation.
+
+Completed
+
+* Supabase Auth
+* Employee Profiles
+* Multi-role users
+* Permissions
+* Admin Invite
+* Auth Context RPC
+* Frontend RBAC
+* Route Guards
+
+---
+
+# PHASE 2 — Admin Module ✅ DONE
+
+Goal
+
+ERP Administration
+
+Completed
+
+* Employee Management
+* Invite User
+* Roles
+* Permissions
+* Admin Dashboard
+
+---
+
+# PHASE 3 — CRM Foundation ✅ DONE
+
+Completed
+
+Customer Master
+
+* Customer
+* Shipper
+* Consignee
+* Validation
+* GST
+* PAN
+* Duplicate Detection
+* Customer Actions
+
+---
+
+# PHASE 3.5 — Platform Foundation ✅ DONE
+
+Completed
+
+* Frontend RBAC
+* Registry
+* Module Registry
+* Notification Foundation
+* Activity Foundation
+
+Platform is finished.
+
+---
+
+# PHASE 4 — SALES CRM
+
+This is where real ERP starts.
+
+---
+
+## 4.1 Customer Interactions
+
+Sidebar
+
+```text
+Dashboard
+
+Customers
+
+⭐ Customer Interactions
+
+Enquiries
+```
+
+Purpose
+
+Salesperson logs every communication.
+
+Interaction Types
+
+* Phone Call
+* Meeting
+* Email
+* WhatsApp
+* Office Visit
+* Video Meeting
+* Others
+
+Features
+
+* Search customer
+* Add interaction
+* Notes
+* Outcome
+* Timeline
+* Attach files (future)
+* Interaction history
+
+---
+
+## 4.2 Follow-up Management
+
+Every interaction can create
+
+```text
+Interaction
+
+↓
+
+Follow-up
+
+↓
+
+Follow-up
+
+↓
+
+Follow-up
+```
+
+Features
+
+* Next Follow-up Date
+* Reminder
+* Complete
+* Skip
+* Reschedule
+* Assign to Self
+* Timeline
+
+Notification service starts being used here.
+
+---
+
+## 4.3 Convert to Enquiry
+
+Qualified interaction
+
+↓
+
+Create Enquiry
+
+Auto carry
+
+* Customer
+* Salesperson
+* Notes
+* Last Interaction
+* Timeline Link
+
+---
+
+# PHASE 5 — ENQUIRY MANAGEMENT
+
+Sidebar
+
+```text
+Enquiries
+```
+
+Features
+
+* Create
+* Assign CS
+* Status
+* Timeline
+* Documents
+* Commodity
+* Containers
+* Ports
+* Shipment Mode
+
+Roles
+
+Salesperson
+
+Customer Service
+
+Sales Manager
+
+Admin
+
+---
+
+## Customer Service Workflow
+
+Receives enquiry
+
+↓
+
+Collect shipment details
+
+↓
+
+Validate
+
+↓
+
+Prepare for Pricing
+
+↓
+
+Send Pricing Request
+
+---
+
+# PHASE 6 — PRICING
+
+Sidebar
+
+```text
+Pricing
+```
+
+Users
+
+Pricing Team
+
+Features
+
+* Ocean Freight
+* Air Freight
+* Local Charges
+* Customs
+* Transport
+* Exchange Rate
+* Margin
+* Vendor Quotes
+
+Output
+
+Quotation
+
+↓
+
+Back to Salesperson
+
+---
+
+# PHASE 7 — CUSTOMER APPROVAL
+
+Salesperson
+
+↓
+
+Receives quotation
+
+↓
+
+Customer discussion
+
+↓
+
+Revision
+
+↓
+
+Approval
+
+↓
+
+KYC Check
+
+---
+
+# PHASE 8 — JOB CREATION
+
+Once approved
+
+```text
+Enquiry
+
+↓
+
+Job
+```
+
+Generate
+
+Job Number
+
+Copy everything
+
+Customer
+
+Pricing
+
+Shipment
+
+Containers
+
+Contacts
+
+Notes
+
+---
+
+# PHASE 9 — OPERATIONS
+
+Sidebar
+
+```text
+Operations
+```
+
+Operations handles
+
+* Booking
+* Shipping Line
+* BL
+* SI
+* VGM
+* Container
+* Vessel
+* Tracking
+* Delivery
+
+Timeline based.
+
+---
+
+# PHASE 10 — ACCOUNTS
+
+Sidebar
+
+```text
+Accounts
+```
+
+Features
+
+Receivables
+
+Payables
+
+Invoices
+
+Vendor Bills
+
+TDS
+
+GST
+
+Profit
+
+Payment Status
+
+---
+
+# PHASE 11 — REPORTS
+
+Sales
+
+Customer
+
+Revenue
+
+Profit
+
+Operations
+
+Follow-ups
+
+Employee
+
+Outstanding
+
+Dashboard KPIs
+
+---
+
+# PHASE 12 — DOCUMENT MANAGEMENT
+
+Reusable everywhere
+
+Upload
+
+Version
+
+Preview
+
+Download
+
+Permissions
+
+Documents
+
+* GST
+* PAN
+* IEC
+* Quotations
+* BL
+* Invoice
+* POD
+
+---
+
+# PHASE 13 — NOTIFICATIONS
+
+Platform starts becoming fully active.
+
+Bell icon
+
+Email
+
+Dashboard
+
+Examples
+
+* Follow-up due
+* New enquiry assigned
+* Pricing completed
+* Job created
+* Invoice overdue
+
+---
+
+# PHASE 14 — ACTIVITY TIMELINE
+
+Every module logs events.
+
+```text
+Customer Created
+
+↓
+
+Interaction Logged
+
+↓
+
+Follow-up Completed
+
+↓
+
+Enquiry Created
+
+↓
+
+Pricing Added
+
+↓
+
+Job Created
+
+↓
+
+Invoice Generated
+```
+
+One unified timeline.
+
+---
+
+# PHASE 15 — DASHBOARD
+
+Different dashboards
+
+Salesperson
+
+Customer Service
+
+Pricing
+
+Operations
+
+Accounts
+
+Admin
+
+Every role sees different widgets.
+
+---
+
+# FUTURE MODULES
+
+* Vendor Management
+* Shipping Lines
+* Airlines
+* Ports
+* Branches
+* Warehouses
+* Task Management
+* Calendar
+* Email Integration
+* WhatsApp Integration
+* Customer Portal
+* Vendor Portal
+* Audit Reports
+* AI Assistant
+* BI Dashboard
+
+---
+
+# Final ERP Flow
+
+```text
+Lead / Existing Customer
+        │
+        ▼
+Customer Master
+        │
+        ▼
+Customer Interaction
+        │
+        ▼
+Follow-up
+        │
+        ▼
+Qualified?
+        │
+        ├── No → More Follow-ups
+        │
+        └── Yes
+                │
+                ▼
+            Enquiry
+                │
+                ▼
+        Customer Service
+                │
+                ▼
+            Pricing
+                │
+                ▼
+        Customer Approval
+                │
+                ▼
+            Job Creation
+                │
+                ▼
+           Operations
+                │
+                ▼
+            Accounts
+                │
+                ▼
+             Reports
+```
+
+## One recommendation
+
+I would also insert **Phase 0** into your documentation (even though it's already built):
+
+```text
+Phase 0
+Project Foundation
+
+- Next.js setup
+- Supabase
+- Database conventions
+- Shared types
+- UI foundation
+- Environment configuration
+```
+
+It makes the roadmap easier for any new developer to understand.
+
+Overall, I think this roadmap matches the Bonzer workflow you've described—from the salesperson's first interaction with a customer all the way through operations and accounts—while keeping the platform you've already built as the shared foundation.
+
+
+Platform ✅
+
+↓
+
+Sales CRM
+    ├── Customer Interactions
+    ├── Follow-ups
+    └── Enquiries
+
+↓
+
+🔧 Technical Debt Sprint
+    ├── Customer validation refactor
+    ├── DB optimization
+    ├── Activity implementation
+    ├── Notification implementation
+    ├── Logging
+    └── Env validation
+
+↓
+
+Pricing
+
+↓
+
+Jobs
+
+↓
+
+Operations
+
+↓
+
+Accounts
+
+↓
+
+Reports
+
+100%. This is actually a **good architectural review**, and almost everything in it should become part of the roadmap—but **not immediately**. We don't want to derail feature development by doing premature refactoring.
+
+Here's how I'd schedule it.
+
+---
+
+# 🔧 Technical Debt Roadmap
+
+## Phase T1 — Customer Action Refactor (After CRM is stable)
+
+**Trigger:** After Customer Interactions and Enquiries are complete.
+
+### Tasks
+
+* Extract shared validation:
+
+  * PAN validation
+  * GST validation
+  * Company name normalization
+  * Duplicate warning generation
+* Create something like:
+
+```text
+lib/customers/
+    validation.ts
+    normalization.ts
+    duplicate-check.ts
+```
+
+Then:
+
+```text
+create-customer.ts
+update-customer.ts
+```
+
+should mostly orchestrate the workflow instead of containing all the business logic.
+
+**Priority:** ⭐⭐⭐⭐⭐
+
+---
+
+## Phase T2 — Database Optimization
+
+Current issue:
+
+```text
+Load all customers
+
+↓
+
+Filter in TypeScript
+```
+
+Target:
+
+```text
+Indexed lookup
+
+↓
+
+Single SQL query
+
+↓
+
+Return result
+```
+
+Possible approaches:
+
+* Normalized indexed column
+* Database function (RPC)
+* Expression index (depending on your normalization strategy)
+
+This is a scalability improvement.
+
+**Priority:** ⭐⭐⭐⭐⭐
+
+---
+
+## Phase T3 — Activity Service (Real Implementation)
+
+Right now:
+
+```text
+Activity Service
+
+↓
+
+Stub
+```
+
+Future:
+
+```text
+Interaction Created
+
+↓
+
+activity.log()
+
+↓
+
+activity table
+
+↓
+
+Timeline UI
+
+↓
+
+Dashboard
+
+↓
+
+Reports
+```
+
+No more placeholder data.
+
+**Priority:** ⭐⭐⭐⭐☆
+
+---
+
+## Phase T4 — Notification Service
+
+Current:
+
+```text
+notify()
+
+↓
+
+does nothing
+```
+
+Future:
+
+```text
+Follow-up Due
+
+↓
+
+Notification Record
+
+↓
+
+Bell Icon
+
+↓
+
+Unread Count
+
+↓
+
+Mark Read
+
+↓
+
+Role/User Targeting
+```
+
+Later:
+
+* Email
+* WhatsApp
+* Push notifications (if needed)
+
+**Priority:** ⭐⭐⭐⭐☆
+
+---
+
+## Phase T5 — Logging
+
+Replace scattered:
+
+```ts
+console.log(...)
+```
+
+with a centralized logger.
+
+Example:
+
+```text
+lib/logging/
+
+logger.ts
+```
+
+Then later you can support:
+
+* Development logging
+* Production logging
+* Error logging
+* Request IDs
+* Structured logs
+
+**Priority:** ⭐⭐⭐☆☆
+
+---
+
+## Phase T6 — Environment Validation
+
+Instead of:
+
+```ts
+process.env.X!
+```
+
+use a validated config layer.
+
+Example:
+
+```text
+lib/config/
+
+env.ts
+```
+
+Validate once at startup and fail fast with clear errors.
+
+**Priority:** ⭐⭐⭐☆☆
+
+---
+
+# What **not** to do now
+
+❌ Don't implement the real Notification service before anything uses it.
+
+❌ Don't build the Activity table before there's meaningful activity to record.
+
+❌ Don't spend days optimizing duplicate checks if you currently have a small dataset.
+
+Those are all valid improvements, but they become much more valuable once the CRM workflow is complete.
+
+---
+
+# Updated Roadmap
+
+```text
+Platform ✅
+
+↓
+
+Sales CRM
+    ├── Customer Interactions
+    ├── Follow-ups
+    └── Enquiries
+
+↓
+
+🔧 Technical Debt Sprint
+    ├── Customer validation refactor
+    ├── DB optimization
+    ├── Activity implementation
+    ├── Notification implementation
+    ├── Logging
+    └── Env validation
+
+↓
+
+Pricing
+
+↓
+
+Jobs
+
+↓
+
+Operations
+
+↓
+
+Accounts
+
+↓
+
+Reports
+```
+
+---
+
+## One thing I'd add
+
+I'd create a dedicated document in your repo:
+
+```text
+documentation/
+
+technical-debt.md
+```
+
+Maintain it like this:
+
+| ID     | Issue                               | Priority | Planned Phase | Status  |
+| ------ | ----------------------------------- | -------- | ------------- | ------- |
+| TD-001 | Shared customer validation          | High     | T1            | Pending |
+| TD-002 | Duplicate scan optimization         | High     | T2            | Pending |
+| TD-003 | Activity service implementation     | Medium   | T3            | Pending |
+| TD-004 | Notification service implementation | Medium   | T4            | Pending |
+| TD-005 | Structured logging                  | Medium   | T5            | Pending |
+| TD-006 | Environment validation              | Medium   | T6            | Pending |
+
+That way, nothing gets forgotten, but it also doesn't interrupt the delivery of the core ERP workflow.
+ 
+
+ Now I'd move from **"building modules"** to **"building business systems."**
+
+There are a few things we haven't planned yet that every production ERP eventually needs.
+
+---
+
+# Phase 16 — Master Data Management (MDM)
+
+Right now you have:
+
+* Customer
+* Shipper
+* Consignee
+
+But logistics ERPs usually have many master tables.
+
+## Future Masters
+
+```text
+Masters
+│
+├── Customers ✅
+├── Customer Contacts
+├── Customer Addresses
+├── Commodities
+├── Ports
+├── Airports
+├── Countries
+├── States
+├── Cities
+├── Currencies
+├── Incoterms
+├── Package Types
+├── Container Types
+├── Shipping Lines
+├── Airlines
+├── Vendors
+├── Transporters
+└── Branches
+```
+
+Keep them under one **Masters** sidebar section.
+
+---
+
+# Phase 17 — Workflow Engine
+
+Instead of hardcoding every status:
+
+```text
+Enquiry
+
+↓
+
+Pricing
+
+↓
+
+Approved
+```
+
+Create reusable workflow definitions.
+
+Example:
+
+```text
+Workflow
+
+Create
+
+Assign
+
+Approve
+
+Reject
+
+Cancel
+
+Complete
+```
+
+Then future modules can reuse them.
+
+---
+
+# Phase 18 — Task Management
+
+This is something many ERPs miss.
+
+Example:
+
+```text
+Task
+
+↓
+
+Assigned to
+
+↓
+
+Due Date
+
+↓
+
+Reminder
+
+↓
+
+Completed
+```
+
+Tasks can come from:
+
+* Follow-up
+* Enquiry
+* Pricing
+* Job
+* Operations
+
+---
+
+# Phase 19 — Calendar
+
+Integrate everything.
+
+Calendar shows:
+
+* Follow-ups
+* Meetings
+* Customer Visits
+* Tasks
+* Shipment ETA
+* Vessel Schedule
+* Invoice Due
+
+One calendar.
+
+---
+
+# Phase 20 — Search
+
+Global search.
+
+```text
+Search
+
+Customer
+
+Interaction
+
+Enquiry
+
+Job
+
+Invoice
+
+Container
+
+BL Number
+```
+
+One search bar.
+
+---
+
+# Phase 21 — Audit
+
+You've already discussed audit briefly.
+
+Eventually implement:
+
+```text
+Created
+
+Updated
+
+Deleted
+
+Old Value
+
+New Value
+
+User
+
+Time
+```
+
+This becomes important for production.
+
+---
+
+# Phase 22 — File Storage
+
+Instead of files scattered everywhere.
+
+```text
+Storage
+
+Customers
+
+Jobs
+
+Invoices
+
+KYC
+
+Quotations
+
+Shipping Docs
+```
+
+One document system.
+
+---
+
+# Phase 23 — Import / Export
+
+Admin tools.
+
+Import:
+
+* Customers
+* Vendors
+* Ports
+* Commodities
+
+Export:
+
+* Excel
+* CSV
+* Reports
+
+---
+
+# Phase 24 — Settings
+
+ERP settings.
+
+```text
+Company
+
+Branches
+
+Financial Year
+
+Prefixes
+
+Number Series
+
+Email
+
+Notification
+
+Roles
+
+Currencies
+```
+
+---
+
+# Phase 25 — Automation Engine
+
+Very powerful later.
+
+Example:
+
+```text
+IF
+
+Follow-up overdue
+
+THEN
+
+Notify Salesperson
+```
+
+Or
+
+```text
+IF
+
+Pricing completed
+
+THEN
+
+Notify Salesperson
+
+Create Task
+```
+
+---
+
+# Phase 26 — AI Assistant
+
+Since you're in AIML, this can become your differentiator.
+
+Ideas:
+
+* Customer interaction summaries
+* Follow-up suggestions
+* Quote drafting assistance
+* Shipment status explanations
+* KPI insights
+* Natural language search ("Show overdue enquiries from Mumbai customers")
+
+---
+
+# Final Production ERP
+
+```text
+Platform
+│
+├── Auth
+├── RBAC
+├── Registry
+├── Notifications
+├── Activity
+├── Search
+├── Audit
+└── Documents
+
+Business
+│
+├── Customers
+├── Customer Interactions
+├── Enquiries
+├── Pricing
+├── Jobs
+├── Operations
+├── Accounts
+├── Reports
+
+System
+│
+├── Masters
+├── Settings
+├── Calendar
+├── Tasks
+├── Automation
+└── AI
+```
+
+---
+
+## One recommendation before you go much further
+
+Before building **Pricing**, spend a little time talking to Bonzer's operations or business team (or whoever defines the workflow) about:
+
+* What data a quotation actually needs.
+* How revisions are handled.
+* What happens if a customer negotiates.
+* When a job is officially considered "created."
+* Which documents are mandatory at each stage.
+
+Those decisions have a big impact on the schema and workflow. Spending a few hours validating them now can save a lot of rework later.

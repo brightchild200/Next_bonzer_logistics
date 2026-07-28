@@ -1,22 +1,25 @@
 import './globals.css';
 import type { Metadata } from 'next';
-import { Inter, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
+import { Manrope, IBM_Plex_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/components/auth-provider';
 import { Toaster } from '@/components/ui/sonner';
 
-const inter = Inter({
+const sans = Manrope({
   subsets: ['latin'],
-  variable: '--font-inter',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-sans',
   display: 'swap',
 });
-const display = Plus_Jakarta_Sans({
+const display = Manrope({
   subsets: ['latin'],
+  weight: ['500', '600', '700'],
   variable: '--font-display',
   display: 'swap',
 });
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-mono',
   display: 'swap',
 });
@@ -31,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${display.variable} ${mono.variable} font-sans antialiased`}
+        className={`${sans.variable} ${display.variable} ${mono.variable} font-sans antialiased`}
       >
         <ThemeProvider defaultTheme="light">
           <AuthProvider>

@@ -143,6 +143,25 @@ export default function EnquiriesPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    const detailId = searchParams.get('detail');
+    if (!detailId) {
+      return;
+    }
+
+    supabase
+      .from('enquiries')
+      .select('*')
+      .eq('id', detailId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setDetailEnquiry(data as Enquiry);
+          setDetailOpen(true);
+        }
+      });
+  }, [searchParams]);
+
+  useEffect(() => {
     const t = setTimeout(fetchEnquiries, 200);
     return () => clearTimeout(t);
   }, [fetchEnquiries]);

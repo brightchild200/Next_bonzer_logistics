@@ -19,7 +19,12 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   sent: { label: 'Sent', className: 'bg-info/10 text-info border-info/20' },
   paid: { label: 'Paid', className: 'bg-success/10 text-success border-success/20' },
   overdue: { label: 'Overdue', className: 'bg-destructive/10 text-destructive border-destructive/20' },
-  // Customer
+  // Customer KYC
+  pending: { label: 'Pending', className: 'bg-warning/10 text-warning border-warning/20' },
+  submitted: { label: 'Submitted', className: 'bg-info/10 text-info border-info/20' },
+  verified: { label: 'Verified', className: 'bg-success/10 text-success border-success/20' },
+  rejected: { label: 'Rejected', className: 'bg-destructive/10 text-destructive border-destructive/20' },
+  // Customer active/inactive
   active: { label: 'Active', className: 'bg-success/10 text-success border-success/20' },
   inactive: { label: 'Inactive', className: 'bg-muted text-muted-foreground border-border' },
 };

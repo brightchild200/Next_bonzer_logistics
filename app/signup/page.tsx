@@ -22,8 +22,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { signup } from '@/lib/actions/auth/signup';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -60,27 +60,21 @@ export default function SignupPage() {
     }
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signUp({
+    const result = await signup({
+      company_name: form.company,
+      full_name: form.name,
       email: form.email,
+      phone: form.mobile,
       password: form.password,
-      options: {
-        data: {
-          company_name: form.company,
-          full_name: form.name,
-          mobile: form.mobile,
-        },
-      },
     });
 
-    if (error) {
-      toast.error(error.message);
-      setLoading(false);
-      return;
-    }
+    setLoading(false);
 
-    if (data.user) {
+    if (result.success) {
       toast.success('Account created! Welcome to Bonzer.');
       router.push('/dashboard');
+    } else {
+      toast.error(result.error);
     }
   };
 

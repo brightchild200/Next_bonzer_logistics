@@ -1,0 +1,295 @@
+PRIORITY UI TESTING 
+
+## CUSTOMER MASTER — MANUAL INTEGRATION TEST BACKLOG
+
+- [ ] Test Customer-only creation.
+- [ ] Test Customer + Shipper atomic creation.
+- [ ] Test Customer + Consignee atomic creation.
+- [ ] Test Customer + Shipper + Consignee atomic creation.
+- [ ] Verify source_customer_id links correctly.
+- [ ] Verify SHP-xxxxx and CON-xxxxx DB-generated references.
+- [ ] Test invalid PAN rejection.
+- [ ] Test invalid GSTIN rejection.
+- [ ] Test PAN/GST mismatch rejection.
+- [ ] Test duplicate GST hard conflict.
+- [ ] Test exact normalized company-name hard conflict.
+- [ ] Test duplicate PAN warning.
+- [ ] Test duplicate email warning.
+- [ ] Test duplicate phone warning.
+- [ ] Test similar company-name warning.
+- [ ] Verify failed atomic creation leaves no partial Customer/Shipper/Consignee rows.
+
+
+Bro, based on **current Bonzer architecture + old enquiry analysis**, ye **Phase 3 TODO + Backlog** hai.
+
+## PHASE 3 — SALES CRM + ENQUIRY WORKFLOW
+
+**Goal:** Actual Bonzer business workflow start karna.
+
+### TODO
+
+* [x] **Step 1 — Freeze workflow + role responsibilities**
+
+  * Salesperson
+  * Sales Manager
+  * Customer Service
+  * Pricing
+  * Admin
+  * Define who can create/view/edit/assign/confirm each stage
+  * Multi-role users must get combined access
+
+  Achha, samjha bro. **CS/Pricing ka actual kaam enquiry ke liye rates prepare karna hai** — commodity/freight related rates + foreign exchange rates etc.
+
+So flow freeze:
+
+**Enquiry created → CS assigned → CS/Pricing rate details prepare/update → customer-side confirmation → KYC check → Enquiry converted to Job.**
+
+Isliye `PRICING` **enquiry status nahi**, balki **separate rate/pricing work layer** hogi linked to enquiry. CS aur Pricing dono isko handle kar sakte hain.
+
+**Step 1 DONE ✅** — role responsibilities + handoff notification rule freeze ho gaya.
+
+* [x] **Step 2 — Customer Master**
+
+  * Global customer database
+  * DB-generated `CUS-00001`
+  * Create customer during visit/interaction
+  * Search/select existing customer
+  * Customer basic profile
+  * GST/details
+  * Prevent duplicate customer strategy
+  * Customer history
+
+Business rules: customer koi bhi authorized Salesperson, Sales Manager, CS, Pricing ya Admin create kar sakta hai. Customer visit/interaction ke time create hua toh direct main Customer Master mein save hoga—temporary lead table nahi. CUS-00001 app code se calculate nahi hoga; DB sequence se generate hoga. Customer globally visible hoga, but future actions permission/scope controlled honge. GST number, if provided, unique hona chahiye.
+
+Duplicate customer detection ke liye exact same company name ko blindly block nahi karunga. Create karte waqt matching GST, phone, email, and similar company name ke basis pe warning dikhayenge: Possible existing customer found. User existing customer select kar sakta hai ya authorized case mein continue kar sakta hai.
+
+
+## CUSTOMER MASTER — ARCHITECTURE UPDATES
+
+### Team Navigation
+- [ ] Remove standalone Customers page from main sidebar navigation.
+- [ ] Customer Master will live inside Team Management.
+- [ ] Create Team secondary left sidebar.
+- [ ] Initial Team sections:
+  - Employees
+  - Customers
+- [ ] Full Customer Master page is visible only to Admin and Sales Manager.
+- [ ] Salesperson, Customer Service, and Pricing must not get a standalone Customer Master browsing page.
+- [ ] Other roles access customer data contextually inside their permitted workflows such as Customer Interactions, Enquiries, and Pricing.
+- [ ] Keep RBAC permissions separate from navigation visibility.
+
+### Customer Identifier Validation
+- [ ] Add PAN format validation.
+- [ ] Add GSTIN format validation.
+- [ ] If both PAN and GSTIN are provided, validate that the PAN embedded inside the GSTIN matches the entered PAN.
+- [ ] Add server-side validation in createCustomer().
+- [ ] Add server-side validation in updateCustomer().
+- [ ] Add PostgreSQL CHECK constraints through a new additive migration.
+- [ ] Do not modify already-applied migration 005 or 006.
+
+### Customer Duplicate Detection
+- [ ] GST exact match must be treated as a hard conflict.
+- [ ] Exact normalized company name must be treated as a hard conflict.
+- [ ] PAN exact match should raise a duplicate warning.
+- [ ] Email exact match should raise a duplicate warning only.
+- [ ] Phone exact match should raise a duplicate warning only.
+- [ ] Similar company name should raise a duplicate warning.
+- [ ] Duplicate conflicts/warnings should identify the existing customer using customer_ref and company_name.
+- [ ] Do not apply customer email or phone uniqueness rules to Shipper or Consignee records.
+
+### Separate Party Masters
+- [ ] Keep Customer, Shipper, and Consignee as separate master entities.
+- [ ] Do not model Shipper/Consignee using is_shipper or is_consignee boolean columns on customers.
+- [ ] Create dedicated shippers master table.
+- [ ] Create dedicated consignees master table.
+- [ ] Shipper and Consignee records must store their own full business details.
+- [ ] Shipper and Consignee records may evolve independently with role-specific fields in future phases.
+- [ ] Add nullable source_customer_id to shippers.
+- [ ] Add nullable source_customer_id to consignees.
+- [ ] source_customer_id links a party record created from an existing Customer Master record.
+- [ ] Future external Shippers and Consignees may exist with source_customer_id = null.
+
+### Add Customer — Party Creation Options
+- [ ] Add "Add as Shipper" checkbox to Add Customer form.
+- [ ] Add "Add as Consignee" checkbox to Add Customer form.
+- [ ] Both checkboxes may be selected simultaneously.
+- [ ] When "Add as Shipper" is selected, copy the customer's full current business details into a new Shipper Master record.
+- [ ] When "Add as Consignee" is selected, copy the customer's full current business details into a new Consignee Master record.
+- [ ] Store source_customer_id on copied Shipper/Consignee records.
+- [ ] Shipper/Consignee records must retain their own copied data and must not depend on live Customer Master fields.
+- [ ] Future Customer Master updates must not blindly overwrite Shipper or Consignee master data.
+
+### Atomic Customer + Party Creation
+- [ ] Do not create Customer, Shipper, and Consignee through separate sequential client/server inserts.
+- [ ] Implement customer + optional shipper + optional consignee creation as one transactional PostgreSQL RPC.
+- [ ] Proposed RPC: create_customer_with_party_records(...).
+- [ ] If Customer creation fails, create nothing.
+- [ ] If Shipper creation fails, rollback Customer creation.
+- [ ] If Consignee creation fails, rollback Customer and Shipper creation.
+- [ ] Update createCustomer() server action to call the transactional RPC.
+- [ ] Keep permission validation at the server-action boundary.
+- [ ] Keep RLS and database constraints as final enforcement boundaries.
+
+### KYC Status Rule
+- [x] Freeze kyc_status as workflow-controlled.
+- [x] General updateCustomer() must not modify kyc_status.
+- [x] Customer Master may display KYC status.
+- [ ] KYC transitions pending → submitted → verified/rejected belong to the dedicated KYC workflow.
+
+* [ ] **Step 3 — Customer Interactions**
+
+  * Visit / Call / Meeting / Email interaction
+  * Salesperson logs interaction
+  * Customer linkage
+  * Interaction date/time
+  * Notes/outcome
+  * Opportunity status
+  * Interaction history
+
+* [ ] **Step 4 — Follow-up System**
+
+  * DB-generated `FUP-00001`
+  * Create follow-up from interaction
+  * Follow-up date
+  * Owner/salesperson
+  * Status
+  * Notes
+  * Reminder **1 week before**
+  * Reminder **1 day before**
+  * Today's follow-ups
+  * Overdue follow-ups
+
+* [ ] **Step 5 — Enquiry Core Schema**
+
+  * DB-generated `ENQ-00001`
+  * Customer
+  * Salesperson/creator
+  * Assigned Customer Service employee
+  * Mode
+  * POL / POD
+  * Shipper
+  * Consignee
+  * Commodity
+  * Packages/unit
+  * Gross weight/unit
+  * CBM
+  * Enquiry status/lifecycle
+  * Cancellation reason
+  * Timestamps
+
+* [ ] **Step 6 — Enquiry Creation Flow**
+
+  * Confirmed opportunity → Create Enquiry
+  * Customer automatically linked
+  * Interaction/follow-up source linkage
+  * Shipment requirement form
+  * Assign Customer Service user
+  * Permission-aware actions
+
+* [ ] **Step 7 — Enquiry Register UI**
+
+  * ERP-style enquiry table
+  * Search
+  * Status filter
+  * Mode filter
+  * Customer filter
+  * Date filter
+  * Salesperson filter
+  * Assigned CS filter
+  * Role/scope-aware visibility
+  * Open enquiry detail
+
+* [ ] **Step 8 — Enquiry Detail Workspace**
+
+  * Basic information
+  * Customer information
+  * Shipment details
+  * Cargo details
+  * Shipper / Consignee
+  * Assignment information
+  * Internal notes
+  * Activity timeline
+  * Linked interaction/follow-up
+  * Future linked quotation/job placeholders
+
+* [ ] **Step 9 — Enquiry Activity / Audit Timeline**
+
+  * Created
+  * Updated
+  * Assigned/reassigned
+  * Status changed
+  * Cancelled
+  * Pricing requested
+  * Actor/user
+  * Timestamp
+  * Metadata
+
+* [ ] **Step 10 — KYC Workflow**
+
+  * Customer KYC status
+  * Required before enquiry → job conversion
+  * Daily KYC reminders for new/pending customers
+  * KYC visibility for relevant roles
+  * Block conversion if mandatory KYC incomplete
+
+* [ ] **Step 11 — Enquiry → Job Conversion Foundation**
+
+  * Finalized enquiry conversion action
+  * Customer Service / Sales Manager / Admin permission
+  * DB-generated `JOB-00001`
+  * Prevent duplicate conversion
+  * Link enquiry ↔ job
+  * Actual Job Operations module continues in Phase 4
+
+* [ ] **Step 12 — Dashboard Visibility**
+
+  * Salesperson: my interactions, follow-ups, enquiries
+  * Sales Manager: team pipeline/workload
+  * Customer Service: assigned enquiries
+  * Pricing: pricing work placeholder/readiness
+  * Admin: company-wide overview
+  * Combined dashboard for multi-role users
+  * **Permission + scope based, not `if role === ...`**
+
+* [ ] **Step 13 — Security + E2E testing**
+
+  * RLS/server action boundaries
+  * Role scope tests
+  * Multi-role user test
+  * Salesperson cannot access unauthorized enquiries
+  * CS assignment test
+  * Manager/Admin visibility
+  * Customer → interaction → follow-up → enquiry flow
+  * KYC block
+  * Enquiry → Job conversion test
+  * `npm run typecheck`
+  * `npm run build`
+
+---
+
+## BACKLOG
+
+* [ ] **Global Employee Code System** — globally unique employee code across all employees; one employee code even for multi-role users
+* [ ] Forced password change on first login for admin-created temporary passwords
+* [ ] Proper employee credential delivery/reset-password workflow
+* [ ] Dashboard redesign/polish after real module data exists
+* [ ] Supabase `Critical dependency: request of a dependency is an expression` warning investigation
+* [ ] Remove/replace legacy `lib/supabase.ts` after old Bolt dependencies are eliminated
+* [ ] Remove old `activity_log` dashboard dependency
+* [ ] Excel export for enquiries
+* [ ] Print enquiry
+* [ ] Enquiry reports
+* [ ] Advanced duplicate-customer detection
+* [ ] Customer document storage
+* [ ] Email/WhatsApp reminders
+* [ ] Real-time notifications
+* [ ] Advanced activity/audit log viewer
+* [ ] Enquiry ageing/SLA tracking
+* [ ] Bulk enquiry assignment
+* [ ] Pricing/quotation workflow — **full implementation Phase 5**
+* [ ] Advanced dashboards/KPIs
+* [ ] AI/ML intelligence layer
+
+**Task allocation:** Phase 3 **workflow, DB architecture, migrations, permission model, lifecycle and schema — ChatGPT can easily handle directly and should lead this.** Large multi-file UI implementation after each schema checkpoint — **Nemotron better/faster**.
+
+**Phase 3 ke liye new ChatGPT session start karna chahiye.** But Phase 2 ka employee listing blocker + inactive-user enforcement pehle close karna mandatory hai.

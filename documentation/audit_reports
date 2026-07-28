@@ -1,0 +1,457 @@
+Employee Management Module Audit Report
+Overview
+The module consists of: Admin server actions (lib/actions/admin/*.ts), database migrations (001, 004, 006), Admin UI (app/(app)/admin/employees/page.tsx), auth flows (app/login, app/set-password, app/signup), middleware, and RBAC infrastructure.
+1. Employee Creation Flow
+Severity	Problem	Root Cause	Solution
+High	Temporary password sent via UI, not email	createEmployee accepts password in request; UI sends it directly to createEmployee action. No email invitation flow exists.	Implement email-based invitation: Admin triggers invite → Supabase sends magic link → User clicks link → Lands on /set-password → Sets password. Remove password from createEmployee input.
+Medium	Employee code auto-generation is DB-trigger only	Migration 006 has a trigger that auto-generates on INSERT/UPDATE if empty. UI allows manual entry but no preview of auto-generated code.	Show preview of next employee code in UI (fetch from sequence or RPC).
+Medium	No validation that email is unique in auth.users	createEmployee uses adminClient.auth.admin.createUser which will fail on duplicate, but error handling is generic.	Catch user_already_exists error explicitly, return user-friendly message.
+Low	Phone field not validated	Phone input accepts any string; no format validation.	Add phone validation (E.164 format).
+2. Employee Invitation Flow
+Severity	Problem	Root Cause	Solution
+Critical	No invitation flow exists	createEmployee creates user with email_confirm: true and a known password. There's no "invite" → "user sets own password" flow.	Implement: 1) Admin clicks "Invite" (no password field) → 2) Server calls adminClient.auth.admin.inviteUserByEmail() → 3) User receives email with magic link → 4) User lands on /set-password (already exists) → 5) Sets password → 6) Redirected to dashboard.
+High	/set-password page expects type=invite in hash but Supabase sends type=recovery by default	set-password/page.tsx:51 checks type === 'invite'. Supabase inviteUserByEmail sends type=recovery.	Update check to accept both invite and recovery, or configure Supabase email template to send type=invite.
+3. Authentication Flow
+Severity	Problem	Root Cause	Solution
+High	Middleware redirects unauthorized users to /login but doesn't preserve redirect target	middleware.ts:52-53 redirects to /login without ?redirectTo= param.	Add redirectTo to login URL so users return to intended page after auth.
+High	Middleware blocks users with no roles (roles.length === 0)	Line 65: roles.length > 0 required. New invited users have no roles until admin assigns them.	Allow users with valid session but no roles to access /set-password or show "awaiting role assignment" page.
+Medium	get_my_auth_context RPC called on every middleware request	Line 61 executes RPC for every protected route.	Cache auth context in session/cookie, or use lighter-weight check for middleware.
+Low	set-password page doesn't handle session expiry gracefully	If hash tokens expire, user sees generic error.	Detect expired tokens, offer "Resend invitation" action.
+4. Password Setup Flow (/set-password)
+Severity	Problem	Root Cause	Solution
+High	Invitation type check fails for Supabase default emails	Line 51: type !== 'invite' but Supabase sends type=recovery for inviteUserByEmail.	Accept both invite and recovery types.
+Medium	No "Resend invitation" option	If link expires, user must contact admin.	Add "Resend invitation" button that calls a server action to re-invite.
+Medium	Password requirements duplicated in client & server	Client validates (lines 25-29), server validates again in createEmployee (lines 11-19).	Centralize password policy in shared utility.
+Low	UI uses sonner toast but no error boundary	If supabase.auth.updateUser fails, toast shows but no fallback UI.	Wrap in error boundary or show inline error.
+5. Password Reset Flow
+Severity	Problem	Root Cause	Solution
+Critical	No password reset flow implemented	Login page has "Forgot password?" button (line 138-144) but no onClick handler. No /forgot-password or /reset-password pages exist.	Implement: 1) /forgot-password page → calls supabase.auth.resetPasswordForEmail() → 2) User receives email → 3) Clicks link → lands on /reset-password (reuse /set-password with type=recovery) → 4) Sets new password.
+Medium	No rate limiting on password reset	Would be handled by Supabase Auth config, but not verified.	Configure Supabase Auth rate limits for resetPasswordForEmail.
+6. Employee Edit Flow
+Severity	Problem	Root Cause	Solution
+Medium	Edit dialog allows changing employee_code but DB trigger normalizes it	Migration 006 trigger runs on UPDATE and will re-format/override manual input (e.g., "EMP001" → "001").	Either: a) Make employee_code read-only in Edit dialog, or b) Remove trigger on UPDATE, only on INSERT.
+Medium	Role assignment replaces all roles (delete + insert)	update_employee RPC (migration 004:147-155) deletes all user_roles then re-inserts. No audit trail of role changes.	Add user_role_audit table or use assigned_at timestamp to track history.
+Low	No email change support	updateEmployee doesn't accept email; profile doesn't store email (in auth.users).	Add email update via adminClient.auth.admin.updateUserById() if needed.
+7. Employee Deactivate/Reactivate
+Severity	Problem	Root Cause	Solution
+Medium	Deactivating doesn't revoke Supabase Auth session	setEmployeeActive only updates profiles.is_active. User's JWT remains valid until expiry.	On deactivate: call adminClient.auth.admin.updateUserById(uid, { ban_duration: '876000h' }) to ban, or implement custom JWT revocation via auth.refresh_token hook.
+Medium	No soft-delete protection for last admin	setEmployeeActive prevents self-deactivation (line 57-62) but doesn't prevent deactivating the last admin user.	Check if target is last user with admin role before allowing deactivate.
+Low	Reactivating doesn't send notification	User gets no email when reactivated.	Optionally send "Account reactivated" email via Supabase or custom.
+8. Multi-Role Assignment
+Severity	Problem	Root Cause	Solution
+Low	UI shows multiple roles with check badge but no "primary" role concept	Migration 001 allows multiple user_roles per user. UI renders all with checkmark (line 633).	If primary role needed for UI/routing, add is_primary to user_roles or designate highest-priority role as primary.
+Low	Role priority in roles table not exposed to UI	roles.priority column exists (migration 001) but not used in role selection UI.	Sort roles by priority in dropdown.
+9. Employee Code Generation
+Severity	Problem	Root Cause	Solution
+Medium	Race condition in auto-generation	Migration 006 trigger uses nextval('employee_code_seq') but if two inserts happen concurrently with manual codes that fill gaps, sequence may produce duplicates on next auto-gen.	Use INSERT ... ON CONFLICT (employee_code) DO UPDATE pattern or advisory lock.
+Low	No UI preview of next auto-generated code	Admin must submit form to see generated code.	Add RPC get_next_employee_code() and show in Create dialog.
+10. RBAC Integration
+Severity	Problem	Root Cause	Solution
+High	PERMISSIONS.ADMIN.USER_READ used for list but USER_UPDATE + USER_ASSIGN_ROLES for edit	employees/page.tsx:730-733 requires BOTH update AND assign_roles for edit. But list only needs READ.	Consistent: Edit should require USER_UPDATE + USER_ASSIGN_ROLES (current is correct), but consider if USER_READ alone should allow view-only.
+Medium	listEmployees uses Admin client but checks permissions on regular client	Line 49: adminClient bypasses RLS. Permission check on line 45 uses user's regular client. If user has permission but adminClient fails, error is generic.	Use adminClient for permission check too, or ensure RLS policies align.
+Medium	update_employee RPC does its own permission check but server action also checks	Double-check: update-employee.ts:43-55 checks permissions, then calls RPC which checks again (migration 004:22-32).	Remove one layer; keep RPC as source of truth.
+Low	PERMISSIONS object in lib/auth/permissions.ts has ENQUIRY.ASSIGN but code uses ENQUIRY.ASSIGN_CS	Line 31: ASSIGN: 'enquiry:assign'. Code uses PERMISSIONS.ENQUIRY.ASSIGN_CS (not defined).	Fix typo or add missing constant.
+11. Supabase Auth Integration
+Severity	Problem	Root Cause	Solution
+High	createEmployee uses email_confirm: true bypassing email verification	Line 104: email_confirm: true makes user immediately active without verifying email ownership.	For invited users: use inviteUserByEmail (sends email). For direct create: keep email_confirm: false and require email verification.
+High	No sync between auth.users email and profiles	profiles table has no email column. Email only in auth.users. listEmployees returns email: null (line 104).	Add email to profiles and sync via trigger, or join auth.users in queries.
+Medium	get_my_auth_context RPC fetches roles/permissions but not is_active from profiles	RPC returns profile.is_active but middleware (line 61) only checks roles.length > 0. Inactive users with roles pass middleware.	Middleware should also check profile.is_active.
+Low	Admin client created inline in createEmployee (line 97)	Dynamic import inside function.	Move createAdminClient import to top level.
+12. Sidebar Navigation
+Severity	Problem	Root Cause	Solution
+Low	Admin sidebar only shows "Employees" and "Customers"	admin-sidebar.tsx:24-27 hardcodes two sections.	Add more sections (Roles, Permissions, Audit Log, Settings) as module expands.
+Low	No badge/indicator for pending invitations	No way to see users who were invited but haven't set password.	Add "Pending Invitations" count/badge in sidebar.
+13. UI/UX Consistency
+Severity	Problem	Root Cause	Solution
+Medium	Duplicate phone field in Create dialog	Lines 233-261 render phone field twice (copy-paste error).	Remove duplicate.
+Medium	Inconsistent loading states	Create dialog disables inputs (line 200), Edit dialog disables whole form.	Standardize: disable submit button, show spinner, keep inputs readable.
+Low	Role selection uses Label + Checkbox instead of Select/MultiSelect	Checkbox grid works but doesn't scale for many roles.	Consider Select with multi-select for 7+ roles.
+Low	No keyboard shortcuts / command palette for admin actions	CommandPalette exists but not wired to employee actions.	Add "Create Employee", "Invite User" to command palette.
+Summary by Severity
+Severity	Count
+Critical	2
+High	6
+Medium	15
+Low	10
+Total	33
+Priority Fix Order
+Critical: Implement invitation flow + password reset flow
+High: Fix middleware auth for unassigned users, fix /set-password invite type, fix email_confirm bypass, fix Supabase auth sync
+Medium: Employee code race condition, deactivate session revocation, RBAC permission consistency, duplicate phone field, loading states
+Low: UI polish, role primary designation, sidebar expansion, command palette
+
+Now I have a comprehensive understanding of the Customer Interaction module. Let me provide my audit findings.
+Customer Interaction Module Audit
+1. Sidebar Integration ❌ MISSING
+- Missing from nav: The navItems in lib/nav.ts has NO "Customer Interactions" entry
+- Module registry exists at lib/registry/modules/interactions.ts but points to /interactions route (doesn't exist; actual route is /customer-interactions)
+- Sidebar uses PERMISSIONS.ENQUIRY.READ for module permission, but module has its own PERMISSIONS.INTERACTION.READ_ALL
+- Result: Module is completely inaccessible via sidebar navigation
+2. Interaction List (customer-interactions-table.tsx) ⚠️ ISSUES
+Issue	Severity	Details
+Customer filter broken	🔴 Critical	Customer dropdown shows only "All Customers" - no actual customer search/options populated
+No server-side sorting	🟡 Medium	Sorting is client-side only; no sortBy/sortDir sent to server
+No customer search	🟡 Medium	Can't search/filter by customer name/ref - only by interaction ref/subject/notes
+Debounced search too slow	🟡 Low	200ms debounce on all filters including search
+No row-level actions menu	🟡 Medium	Only "View" (click row) and direct link; no Edit/Delete/Convert from list
+Empty state CTA works	✅ Good	"New Interaction" button in empty state
+Pagination works	✅ Good	Server-side pagination with count
+Skeleton loading	✅ Good	Skeleton rows during initial load
+Error display	✅ Good	Error card with red border
+3. Interaction Details (interaction-detail.tsx) ⚠️ ISSUES
+Issue	Severity	Details
+Bug: updateData undefined	🔴 Critical	Line 92 uses updateData but it's never defined (should be editData)
+Missing interactionOutcomeId in edit	🟡 Medium	Edit dialog doesn't include interaction type selector (only outcome)
+prompt() for completion notes	🟡 UX	Uses blocking prompt() instead of proper dialog
+"Open Customer" button broken	🟡 Medium	Button exists but has no onClick handler
+"View on List" button broken	🟡 Medium	Button exists but has no onClick handler
+Convert to enquiry works	✅ Good	Calls RPC, redirects to enquiry on success
+Follow-up creation/completion works	✅ Good	Dialogs with validation
+Edit dialog has validation	✅ Good	Form validation with disabled submit
+Audit trail displayed	✅ Good	Created/Updated/Enquiry/Customer shown
+Permission check missing on delete	🔴 Critical	Delete route exists in dropdown but no permission check in UI or server action
+4. Create Interaction (create-interaction-form.tsx) ⚠️ ISSUES
+Issue	Severity	Details
+Customer search works	✅ Good	Uses searchCustomers RPC with dropdown results
+Employee dropdown populated	✅ Good	From listEmployeesForFilter
+Type/Outcome dropdowns populated	✅ Good	Server-fetched on page load
+Form validation (zod + react-hook-form)	✅ Good	Client + server validation
+Default datetime = now	✅ Good	new Date().toISOString().slice(0, 16)
+No "Create Another" option	🟡 UX	Redirects to detail page only
+No keyboard shortcut to submit	🟡 UX	Standard form submit only
+5. Follow-ups ⚠️ ISSUES
+Issue	Severity	Details
+Displayed in detail view	✅ Good	Pending/completed separated with badges
+Create via dialog	✅ Good	Datetime-local input, validation
+Complete via prompt()	🔴 Poor UX	Uses prompt() - not accessible, blocks UI
+No follow-up list page	🟡 Missing	Can only view follow-ups from interaction detail
+No overdue indicators	🟡 Missing	No visual indicator for overdue follow-ups
+No filter by status/due date in detail	🟡 Missing	Shows all follow-ups unfiltered
+6. Customer Search ⚠️ ISSUES
+Issue	Severity	Details
+Works in Create form	✅ Good	searchCustomers RPC with debounced search
+Broken in List filters	🔴 Critical	Customer dropdown empty - no search integration
+No customer search in detail view	🟡 Missing	Can't change customer from detail view
+7. Employee Selection ✅ WORKS
+- Populated from listEmployeesForFilter (active profiles)
+- Shows name + employee code
+- Works in both Create form and List filters
+8. Validation ⚠️ ISSUES
+Area	Client	Server	Notes
+Create Interaction	✅ Zod	✅ Full	Good coverage
+Update Interaction	❌ None	✅ Full	No client validation in edit dialog
+Create Follow-up	⚠️ Basic	✅ Full	Only required field check
+Complete Follow-up	❌ None	✅ Full	Uses prompt() - no validation
+9. Loading States ⚠️ PARTIAL
+Component	Loading State
+List page	✅ Skeletons
+Detail page	❌ None (server component)
+Create page	❌ None (server component)
+Form submissions	✅ Button disabled + spinner
+Follow-up actions	✅ Button disabled
+Filter changes	✅ Disabled inputs + debounce
+10. Error Handling ⚠️ ISSUES
+Issue	Severity	Details
+Server errors caught	✅ Good	All actions return {success, error}
+Client error display	✅ Good	Toast/card with error message
+Update interaction bug	🔴 Critical	updateData undefined - will crash on save
+Delete interaction missing	🔴 Critical	Dropdown has delete but no server action
+Permission errors generic	🟡 Medium	"Insufficient permissions" - no detail
+11. Permissions ⚠️ MISALIGNED
+Permission	Used Where	Issue
+PERMISSIONS.ENQUIRY.READ	Sidebar nav for module	Should be PERMISSIONS.INTERACTION.READ_ALL
+PERMISSIONS.CUSTOMER.CREATE	Create interaction	Odd - creating interaction checks customer create perm
+PERMISSIONS.ENQUIRY.CREATE	Create follow-up, convert	Should be FOLLOW_UP / INTERACTION perms
+follow_up:update_own (string)	Complete follow-up	Hardcoded string, not from PERMISSIONS constant
+12. Responsive UI ✅ MOSTLY GOOD
+- Tables scroll horizontally on mobile
+- Grid layouts stack on mobile (lg:grid-cols-3)
+- Form fields stack on mobile
+- Sidebar collapses on mobile
+- Issue: Filter bar in list is very dense on mobile (many selects)
+13. Workflow Consistency ⚠️ ISSUES
+Workflow	Status	Issues
+List → Create → Detail	✅ Works	-
+List → Detail → Edit	❌ Broken	Edit dialog bug (updateData)
+List → Detail → Delete	❌ Missing	No delete action
+Detail → Follow-up → Complete	⚠️ Works	Uses prompt()
+Detail → Convert to Enquiry	✅ Works	Redirects to enquiry
+Detail → Open Customer	❌ Broken	Button has no handler
+Priority Fixes
+🔴 Critical (Blockers)
+1. Add "Customer Interactions" to sidebar nav (lib/nav.ts)
+2. Fix updateData undefined bug in interaction-detail.tsx:92
+3. Add customer search to list filters (populate customer dropdown)
+4. Implement delete interaction (server action + UI)
+5. Fix permission constants - use PERMISSIONS.FOLLOW_UP.UPDATE_OWN not string
+🟡 High (Broken Features)
+6. Add "Open Customer" and "View on List" handlers in detail view
+7. Replace prompt() with proper dialog for follow-up completion
+8. Add client validation to edit dialog
+9. Add server-side sorting to list
+🟢 Medium (UX Improvements)
+10. Add "Create Another" option after create
+11. Show overdue indicators on follow-ups
+12. Add interaction type to edit dialog
+13. Add loading states to server-rendered pages
+14. Mobile-responsive filter bar
+🔵 Low (Nice to Have)
+15. Follow-ups list page
+16. Keyboard shortcuts
+17. Bulk actions on list
+18. Export functionality (button exists but not wired)
+▣  Build · Nemotron 3 Ultra Free · 1m 49s
+Build·Nemotron 3 Ultra FreeOpenCode Zen
+C:\Users\riyas\OneDrive\Documents\sies_things\skills\64.0K (6%)ctrl+p 
+
+
+baki dono ka next prompt mein deti hoon 
+
+**Audit Findings**
+
+1. **Sidebar hierarchy is overloaded and semantically mixed**
+   - [lib/nav.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/nav.ts#L31) places `Dashboard`, `Enquiries`, `Admin`, `Quotations`, `Shipments`, `Invoices`, `Reports`, `Analytics`, and `Settings` in one flat rail.
+   - [components/sidebar.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/sidebar.tsx) then adds a second concept of “Admin” in the app shell, while [components/admin-sidebar.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/admin-sidebar.tsx#L24) creates a separate admin nav inside `/admin`.
+   - Why this hurts ERP usability: ERP users navigate by workstream and permission scope, not by a single universal list. Mixing operational, analytical, and admin tasks increases scanning time and makes the IA harder to learn.
+   - Recommendation: split navigation into clear groups like `Operations`, `Finance`, `Reporting`, and `Administration`, and keep admin-only items isolated from daily-work items.
+
+2. **The app has two different admin navigation patterns**
+   - [lib/nav.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/nav.ts#L34) shows `Admin` as a nested item in the primary sidebar.
+   - [components/admin-sidebar.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/admin-sidebar.tsx#L24) introduces a separate secondary sidebar for the same area.
+   - Why this hurts ERP usability: users can’t build a stable mental model if “Admin” sometimes means a sidebar section and sometimes means a workspace layout.
+   - Recommendation: pick one admin pattern. For ERP scale, a dedicated admin shell is usually better; the primary sidebar should route into it, not duplicate it.
+
+3. **The sidebar footer copy is inconsistent and visually noisy**
+   - [components/sidebar.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/sidebar.tsx#L231) displays `Bonzer Pro` and `Enterprise plan · Unlimited`.
+   - Why this hurts ERP usability: footer metadata is useful, but marketing-style plan language is not operational context. It adds noise without helping users complete a task.
+   - Recommendation: replace it with account/workspace identity, environment, or role summary. That improves confidence and reduces confusion in multi-tenant ERP use.
+
+4. **The dashboard behaves like a marketing landing page, not an ERP command center**
+   - [app/(app)/dashboard/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/dashboard/page.tsx) is visually rich, but it prioritizes decorative cards, AI insights, and promotional quick actions over task routing.
+   - Why this hurts ERP usability: a dashboard should reduce decision time and surface exceptions, work queues, and action-needed items first.
+   - Recommendation: prioritize operational KPIs, overdue items, assigned work, and alerts that need action. Keep “insights” secondary unless they are tied to a workflow.
+
+5. **The top-level page header pattern is inconsistent across modules**
+   - [components/page-header.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/page-header.tsx#L24) uses a title-plus-actions layout.
+   - [components/create-interaction-form.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/create-interaction-form.tsx#L168) uses its own full-page title block instead of the shared header.
+   - [app/(app)/settings/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/settings/page.tsx#L22) follows the shared pattern again.
+   - Why this hurts ERP usability: inconsistent page headers make it harder to predict where primary actions live.
+   - Recommendation: standardize the header for all primary modules, including create/edit flows, so action placement is predictable.
+
+6. **Forms are not standardized and mix validation systems**
+   - [components/enquiry-form.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/enquiry-form.tsx) uses a custom multi-step state form.
+   - [components/create-interaction-form.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/create-interaction-form.tsx) uses `react-hook-form` + Zod.
+   - [components/customer-workspace.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-workspace.tsx) uses ad hoc local state and manual validation.
+   - Why this hurts ERP usability: inconsistent form behavior creates training overhead and increases data-entry errors.
+   - Recommendation: use one form system and one validation style for all CRUD flows, especially in high-frequency ERP tasks.
+
+7. **The employee create dialog contains a duplicated phone field**
+   - [app/(app)/admin/employees/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/admin/employees/page.tsx) renders `Phone (Optional)` twice in `CreateEmployeeDialog`.
+   - Why this hurts ERP usability: duplicate fields make the form feel broken and can produce conflicting input or duplicate data entry.
+   - Recommendation: remove the duplicate and audit the rest of the admin forms for repeated controls. This directly improves trust in the system.
+
+8. **Search and filter affordances are inconsistent across lists**
+   - [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx#L199) has a dense filter bar with multiple selects, inline date fields, and a clear button.
+   - [components/customer-workspace.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-workspace.tsx#L176) only has a single search box.
+   - [app/(app)/shipments/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/shipments/page.tsx) and [app/(app)/invoices/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/invoices/page.tsx) use only search.
+   - Why this hurts ERP usability: users can’t transfer learning from one list to another if filtering behaves differently every time.
+   - Recommendation: define a common list-toolbar pattern with search, filters, sort, clear, and result count. That makes large ERP datasets easier to operate.
+
+9. **Some navigation and row actions use full page reloads**
+   - [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx#L143) and [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx#L410) use `window.location.href`.
+   - Why this hurts ERP usability: reload-based navigation breaks flow, slows down table-heavy work, and can reset filters or local state.
+   - Recommendation: use router navigation consistently. ERP users benefit from fast, state-preserving transitions.
+
+10. **Back/cancel behavior is inconsistent and potentially destructive**
+   - [components/create-interaction-form.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/create-interaction-form.tsx#L181) and [components/create-interaction-form.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/create-interaction-form.tsx#L442) rely on `router.back()`.
+   - Why this hurts ERP usability: “back” is browser-history dependent, so users can lose context or return to an unrelated page after a deep link.
+   - Recommendation: use explicit cancel destinations, such as the module list or detail view, so the workflow is predictable.
+
+11. **Loading states are present, but not consistent in depth or placement**
+   - [app/(app)/dashboard/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/dashboard/page.tsx) uses skeletons for activity, but charts and KPI cards appear immediately with static content.
+   - [app/(app)/admin/employees/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/admin/employees/page.tsx) has a more thorough skeleton table and cards.
+   - [components/customer-workspace.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-workspace.tsx) shows skeleton cards only for the customer grid.
+   - Why this hurts ERP usability: inconsistent loading behavior makes the app feel uneven and can cause users to misread what is ready.
+   - Recommendation: standardize loading states by content type: tables, cards, drawers, and forms should each have a predictable skeleton pattern.
+
+12. **Empty states are inconsistent in tone and completeness**
+   - [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx#L393) has a strong empty state with CTA and filter-aware copy.
+   - [app/(app)/shipments/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/shipments/page.tsx#L105) and [app/(app)/invoices/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/invoices/page.tsx#L111) show simpler empty states without a next step.
+   - [components/customer-workspace.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-workspace.tsx#L500) has an informative empty state, but the page still relies on search-only affordance.
+   - Why this hurts ERP usability: empty states should teach the next action, not just say “nothing exists.”
+   - Recommendation: unify empty state structure with a primary CTA, a cause-aware message, and optionally a secondary shortcut like import or filter reset.
+
+13. **Error states are not uniformly actionable**
+   - [components/customer-workspace.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-workspace.tsx) shows a retryable load failure.
+   - [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx) surfaces a plain error card.
+   - [components/create-interaction-form.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/create-interaction-form.tsx) shows a submission error card.
+   - Why this hurts ERP usability: some errors let users recover, others just stop them. In ERP work, recovery paths matter because users are often processing batches of records.
+   - Recommendation: use a consistent error pattern with “what happened,” “what to do next,” and a retry or save-draft action when possible.
+
+14. **Typography is mostly consistent, but the hierarchy is uneven across modules**
+   - [components/page-header.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/page-header.tsx#L24) uses `font-display` for page titles.
+   - [components/module-placeholder.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/module-placeholder.tsx#L36) uses a larger branded display style.
+   - [app/(app)/settings/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/settings/page.tsx#L28) and [app/(app)/dashboard/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/dashboard/page.tsx#L298) use the same family, but different modules sometimes introduce stronger visual treatment than necessary.
+   - Why this hurts ERP usability: too much typographic emphasis reduces signal in data-dense screens.
+   - Recommendation: reserve display treatment for page titles and high-level empty/placeholder states; keep operational modules visually calmer.
+
+15. **There is a mismatch between polished modules and placeholder modules**
+   - [app/(app)/quotations/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/quotations/page.tsx), [app/(app)/reports/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/reports/page.tsx), and [app/(app)/analytics/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/analytics/page.tsx) are polished placeholders, while other modules like shipments and invoices are lightweight list views.
+   - Why this hurts ERP usability: the product feels uneven, and users can’t tell what is truly supported versus conceptually staged.
+   - Recommendation: either bring placeholder pages up to real workflow standards or visually label them as “coming soon” in a way that does not mimic finished modules.
+
+16. **Some data presentation is too code-like for end users**
+   - [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx#L326) shows raw IDs in customer and employee columns.
+   - Why this hurts ERP usability: ERP users need human-readable names first, with IDs as secondary metadata.
+   - Recommendation: display names and codes together, not IDs alone. This improves scan speed and reduces lookup friction.
+
+17. **The app is already using good table scaffolding, but it is not yet enterprise-scalable**
+   - [components/ui/table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/ui/table.tsx) is a solid base, but the screens above do not consistently add sticky headers, row density toggles, column controls, or persisted filters.
+   - Why this hurts ERP usability: once record counts grow, basic tables become slow to operate without density and personalization controls.
+   - Recommendation: add scalable table affordances where volume matters most: column visibility, saved filters, sticky headers, and density selection.
+
+**Overall assessment**
+
+The product has a strong visual foundation and some well-executed ERP behaviors, especially in the enquiries and customer-interactions flows. The main UX problem is not polish, it’s consistency of information architecture, workflow behavior, and interaction standards across modules.
+
+If you want, I can turn this into a prioritized ERP design backlog with:
+1. `P0` usability fixes,
+2. `P1` consistency fixes, and
+3. `P2` scalability improvements.
+
+
+**Production Audit Report**
+
+Overall status: **not production-ready yet**. The codebase has a solid Supabase/RLS foundation, but there are a few authorization and workflow gaps that would be risky in a real ERP deployment, plus several medium-severity issues around consistency, observability, and scalability.
+
+**Critical**
+
+1. **Middleware authorization does not actually block unauthorized app access**
+   - [middleware.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/middleware.ts#L49) checks `get_my_auth_context`, but when authorization fails it returns `response` instead of a redirect/deny.
+   - Impact: users can still reach app routes and load UI shell content even when they should be blocked. If any page has a weak client-side gate or a permissive query, this becomes a real access-control failure.
+   - Production risk: high. Route protection should never fail open.
+
+2. **Authorization is split between middleware, UI checks, and RLS, which creates policy drift risk**
+   - [components/auth-provider.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/auth-provider.tsx) handles roles/permissions in the client, [middleware.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/middleware.ts) does a coarse role check, and the database enforces RLS in migrations like [005_customer_master.sql](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/supabase/migrations/005_customer_master.sql) and [008_customer_interactions.sql](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/supabase/migrations/008_customer_interactions.sql).
+   - Impact: if any one layer is weakened or misconfigured, the system can behave inconsistently. In ERP systems, permission drift is a major source of accidental overexposure.
+   - Production risk: high. The security model is strong in intent, but not unified enough for confidence.
+
+3. **Legacy schema history shows anonymous-write risk on core tables**
+   - [supabase/legacy-migrations/20260707164107_make_owner_id_nullable.sql](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/supabase/legacy-migrations/20260707164107_make_owner_id_nullable.sql) explicitly drops `owner_id` NOT NULL and defaults to support anon mode on `customers`, `enquiries`, `quotations`, `shipments`, `invoices`, `activity_log`, and `team_members`.
+   - Impact: this is a serious production concern if any of those tables or their policies are still active in a deployed environment. Even if newer migrations supersede it, the presence of this migration indicates the schema has had a weaker security posture.
+   - Production risk: critical if applied or still reflected in live environments; otherwise still a governance red flag that must be verified against the deployed database.
+
+**High**
+
+1. **Customer interaction create/update flows rely on the wrong permission family in places**
+   - [lib/actions/customer-interactions/mutations/create-interaction.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customer-interactions/mutations/create-interaction.ts) checks `customer:create` before creating an interaction.
+   - [lib/actions/customer-interactions/mutations/update-interaction.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customer-interactions/mutations/update-interaction.ts) checks `customer:update` before updating an interaction.
+   - Impact: the authorization model is semantically inconsistent. This can accidentally grant or deny access based on customer permissions instead of interaction permissions, and it makes future permission maintenance brittle.
+   - Production risk: high because it can create hidden privilege mismatches.
+
+2. **Interactive mutation paths are not consistently transactional at the application level**
+   - [lib/actions/admin/create-employee.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/admin/create-employee.ts) manually creates auth users, then profile rows, then role rows, and only partially rolls back by deleting the auth user on failure.
+   - [lib/actions/customer-interactions/mutations/create-interaction.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customer-interactions/mutations/create-interaction.ts) does validation across multiple tables, then inserts a row, but relies on the DB layer for final integrity.
+   - [lib/actions/customers/create-customer.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customers/create-customer.ts) is better because it delegates the actual multi-row create to an RPC, but the preflight checks are still race-prone.
+   - Impact: in ERP workflows, partial writes create orphaned users, duplicate records, and support tickets.
+   - Production risk: high, especially for admin/account provisioning.
+
+3. **Some privilege checks are incomplete or overly broad**
+   - [lib/actions/admin/set-employee-active.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/admin/set-employee-active.ts) checks only `user:deactivate` and then updates profiles directly.
+   - [lib/actions/admin/list-roles.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/admin/list-roles.ts) allows role listing with either `user:read` or `user:assign_roles`, which may be acceptable, but the access model is not consistently documented or enforced across admin actions.
+   - Impact: production authorization needs a clearer distinction between read, assign, update, and deactivate scopes.
+   - Production risk: high because admin screens are the most sensitive part of the system.
+
+4. **Navigation and page transitions sometimes bypass Next.js routing**
+   - [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx#L143) and [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx#L410) use `window.location.href`.
+   - [components/auth-provider.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/auth-provider.tsx) also uses a hard navigation on sign-out.
+   - Impact: full page reloads can break state, slow the app, and complicate error recovery.
+   - Production risk: high in a data-entry-heavy ERP because it interrupts workflow continuity.
+
+5. **No visible centralized server-side audit logging for security-sensitive actions**
+   - The UI has activity display, but mutation files like [lib/actions/admin/create-employee.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/admin/create-employee.ts), [lib/actions/customers/create-customer.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customers/create-customer.ts), and [lib/actions/enquiries/update-enquiry-status.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/enquiries/update-enquiry-status.ts) do not show a unified audit trail write.
+   - Impact: ERP production systems need traceability for admin changes, customer edits, and workflow transitions.
+   - Production risk: high from a compliance and support standpoint.
+
+**Medium**
+
+1. **RLS is present, but not uniformly modernized across the data model**
+   - [supabase/migrations/005_customer_master.sql](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/supabase/migrations/005_customer_master.sql) and [supabase/migrations/007_party_masters.sql](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/supabase/migrations/007_party_masters.sql) use permission-aware RLS well.
+   - [supabase/migrations/008_customer_interactions.sql](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/supabase/migrations/008_customer_interactions.sql) has permission-aware selects/inserts/updates, which is good.
+   - But the legacy migrations and the presence of older owner-scoped tables show the model is in transition.
+   - Impact: mixed-generation schemas are harder to operate safely and harder to reason about.
+   - Production risk: medium, but it becomes high if the legacy tables remain live.
+
+2. **Concurrency protections depend heavily on unique constraints rather than atomic app flows**
+   - [lib/actions/customers/create-customer.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customers/create-customer.ts) does duplicate checks before the insert RPC.
+   - [lib/actions/customers/update-customer.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customers/update-customer.ts) does the same for updates.
+   - [supabase/migrations/007_party_masters.sql](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/supabase/migrations/007_party_masters.sql) adds normalized company-name uniqueness, which is strong, but the UI preflight checks are still race-prone.
+   - Impact: two users can still see “available” and then collide.
+   - Production risk: medium. The database is doing the real protection, but the UX can mislead users.
+
+3. **Validation is inconsistent in depth and enforcement location**
+   - Some flows use Zod and react-hook-form, like [components/create-interaction-form.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/create-interaction-form.tsx), while others use manual local state, like [components/customer-workspace.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-workspace.tsx).
+   - Some server actions validate aggressively, others mostly trust the database.
+   - Impact: inconsistent validation increases defect rates and support burden.
+   - Production risk: medium, especially for master-data entry.
+
+4. **Error handling is uneven across the app**
+   - Some pages provide retryable failures, like [components/customer-workspace.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-workspace.tsx).
+   - Others surface only a plain message, like [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx).
+   - Some mutations only return generic text and don’t preserve field-level context.
+   - Impact: users need actionable recovery paths in ERP apps, not just failure notifications.
+   - Production risk: medium.
+
+5. **Performance will degrade as record counts grow**
+   - [app/(app)/dashboard/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/dashboard/page.tsx) loads live activity and renders many charts/cards at once.
+   - [app/(app)/shipments/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/shipments/page.tsx), [app/(app)/invoices/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/invoices/page.tsx), and [components/customer-interactions-table.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/customer-interactions-table.tsx) do not show virtualization, saved filters, or server-driven column minimization.
+   - Impact: acceptable now, but brittle at scale.
+   - Production risk: medium for a growing ERP.
+
+6. **Responsive behavior is acceptable for common screens but not deeply optimized for dense workflows**
+   - Most pages use Tailwind responsive layout patterns, but the tables and filter bars remain desktop-first.
+   - The app shells and forms rely on large horizontal controls that may degrade on smaller laptops or tablet-admin use.
+   - Impact: ERP users often work on wide screens, but responsive degradation still matters for field or on-the-go use.
+   - Production risk: medium.
+
+7. **Notifications are mostly cosmetic**
+   - [components/topbar.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/topbar.tsx) shows a notifications dropdown, but it appears static.
+   - Impact: users can mistake placeholder notifications for a live alerting system.
+   - Production risk: medium because alert fatigue and false confidence are both bad in operations software.
+
+**Low**
+
+1. **Accessibility is decent structurally, but not fully evidenced**
+   - The app uses Radix primitives and labeled controls in many places, which is a good baseline.
+   - I did not see a full accessibility layer for focus management, skip links, form summary errors, or dense-table keyboard ergonomics.
+   - Impact: likely usable, but not yet “audited accessible” for enterprise deployment.
+   - Production risk: low to medium.
+
+2. **Logging is inconsistent and partly development-oriented**
+   - [lib/actions/customers/create-customer.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/lib/actions/customers/create-customer.ts) contains extensive `console.log` calls.
+   - [backend/src/index.ts](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/backend/src/index.ts) also logs directly to console.
+   - Impact: noisy logs are manageable in dev but weak for production observability.
+   - Production risk: low by itself, but it becomes important when incidents occur.
+
+3. **Typography and visual polish are good, but some modules are over-styled relative to their function**
+   - [app/globals.css](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/globals.css) and [components/module-placeholder.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/components/module-placeholder.tsx) create a polished visual language.
+   - Impact: the app looks modern, but some placeholder and dashboard content reads more like a product demo than an ERP workbench.
+   - Production risk: low, mainly UX maturity.
+
+4. **Some module pages are placeholders rather than production workflows**
+   - [app/(app)/quotations/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/quotations/page.tsx), [app/(app)/reports/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/reports/page.tsx), and [app/(app)/analytics/page.tsx](/C:/Users/riyas/OneDrive/Documents/sies_things/skills/next_logistics/app/(app)/analytics/page.tsx) are polished placeholders.
+   - Impact: not a security issue, but it means the product surface is uneven and some menu items are effectively marketing shells.
+   - Production risk: low, unless these are being presented as live workflows.
+
+5. **Some UI copy and route naming are not yet enterprise-consistent**
+   - Examples include route naming around `customer-interactions`, `enquiries`, `admin`, and mixed use of `New` buttons with ad hoc query params.
+   - Impact: minor, but consistency matters in ERP training and support.
+   - Production risk: low.
+
+**Bottom line**
+
+- **Security posture:** promising but not yet production-safe because route-level authorization is not reliably enforced and legacy schema history raises concern.
+- **Database/RLS posture:** strong in the newer migrations, but needs verification against the deployed environment and better alignment with the app permission model.
+- **Operational readiness:** moderate; workflows exist, but logging, auditability, concurrency handling, and navigation consistency still need hardening before real production use.
+
+If you want, I can turn this into a prioritized remediation checklist next, still without changing code.
