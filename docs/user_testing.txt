@@ -1,0 +1,309 @@
+Since you're building an **ERP**, don't think of user testing as "click every button." Think of it as **validating business workflows**.
+
+I recommend this order for **every future module** as well.
+
+---
+
+# Phase 0 — Pre-Testing Checklist
+
+## Environment
+
+* [x] Latest code pulled
+* [x] Latest migrations applied
+* [ ] Seed data available
+* [x] Test users created
+* [x] No build errors
+* [x] No console errors
+* [x] No network failures
+* [ ] Fresh database (or known test data)
+
+---
+
+## Test Accounts
+
+Create and verify:
+
+* [x] Admin
+* [x] Sales Manager
+* [x] Salesperson A
+* [ ] Salesperson B
+* [ ] Customer Service
+* [ ] Pricing
+* [ ] Operations
+* [ ] Accounts
+
+---
+
+# Phase 1 — Authentication Testing
+
+## Login
+
+* [x] Valid login
+* [x] Invalid password
+* [x] Invalid email
+* [ ] Session persists
+* [x] Logout
+* [x] Password reset
+* [x] Expired reset link
+* [x] Password policy
+* [x] Unauthorized page redirect
+---
+
+# Phase 2 — RBAC Testing
+
+For every role verify:
+
+* [x] Sidebar visibility
+* [x] Page access
+* [ ] API access
+* [ ] Server Actions
+* [ ] Hidden buttons
+* [ ] Disabled actions
+* [ ] Unauthorized URL access
+
+---
+
+# Phase 3 — Customer Master Testing
+
+## Create
+
+* [ ] New customer
+* [ ] Required fields
+* [ ] GST validation
+* [ ] PAN validation
+* [ ] Duplicate company
+* [ ] Duplicate GST
+* [ ] Duplicate PAN
+* [ ] Shipper
+* [ ] Consignee
+* [ ] Both shipper & consignee
+
+---
+
+## Edit
+
+* [ ] Update customer
+* [ ] Validation
+* [ ] Duplicate prevention
+* [ ] Audit fields updated
+
+---
+
+## Search
+
+* [ ] Search by company
+* [ ] Search by GST
+* [ ] Search by customer ref
+* [ ] Pagination
+* [ ] Sorting
+
+---
+
+# Phase 4 — Customer Interaction Testing
+
+## Create
+
+* [ ] Existing customer
+* [ ] New customer from interaction
+* [ ] Required fields
+* [ ] Contact person
+* [ ] Mobile
+* [ ] Email
+* [ ] Designation
+* [ ] Channel
+* [ ] Duration
+* [ ] Notes
+* [ ] Attachments (if available)
+
+---
+
+## View
+
+* [ ] Detail page
+* [ ] All fields displayed
+* [ ] Badges
+* [ ] Dates
+* [ ] Audit information
+
+---
+
+## Edit
+
+* [ ] Edit own interaction
+* [ ] Validation
+* [ ] Save
+* [ ] Cancel
+* [ ] Audit updated
+
+---
+
+# Phase 5 — Permission Testing
+
+## Salesperson
+
+* [ ] Create interaction
+* [ ] View own interaction
+* [ ] Edit own interaction
+* [ ] Cannot view others
+* [ ] Cannot edit others
+
+---
+
+## Sales Manager
+
+* [ ] View all interactions
+* [ ] Edit allowed interactions
+* [ ] Team visibility
+
+---
+
+## Admin
+
+* [ ] View everything
+* [ ] Edit everything
+
+---
+
+# Phase 6 — Follow-up Testing
+
+* [ ] Create follow-up
+* [ ] Multiple follow-ups
+* [ ] Assigned to self
+* [ ] Planned note
+* [ ] Completed note
+* [ ] Status update
+* [ ] Follow-up history
+* [ ] Reminder generation
+
+---
+
+# Phase 7 — Enquiry Conversion
+
+* [ ] Convert interaction
+* [ ] Cannot convert twice
+* [ ] Enquiry created
+* [ ] Customer linked
+* [ ] History retained
+
+---
+
+# Phase 8 — Database Verification
+
+After every major action verify:
+
+* [ ] Record inserted
+* [ ] Foreign keys correct
+* [ ] Audit columns correct
+* [ ] Soft delete (if applicable)
+* [ ] No duplicate records
+
+---
+
+# Phase 9 — Error Handling
+
+* [ ] Invalid input
+* [ ] Missing required fields
+* [ ] Unauthorized access
+* [ ] Network interruption
+* [ ] Server error
+* [ ] Friendly error messages
+
+---
+
+# Phase 10 — UI/UX Testing
+
+* [ ] Responsive layout
+* [ ] Loading states
+* [ ] Empty states
+* [ ] Success toasts
+* [ ] Error toasts
+* [ ] Long text handling
+* [ ] Keyboard navigation
+
+---
+
+# Phase 11 — Performance Testing
+
+* [ ] Page load
+* [ ] Large interaction list
+* [ ] Search speed
+* [ ] Pagination
+* [ ] No duplicate API calls
+
+---
+
+# Phase 12 — Regression Testing
+
+Confirm existing features still work:
+
+* [ ] Authentication
+* [ ] Sidebar
+* [ ] Customer Master
+* [ ] Shipper Master
+* [ ] Consignee Master
+* [ ] Existing permissions
+* [ ] Existing workflows
+
+---
+
+# Phase 13 — Security Testing
+
+* [ ] Direct URL access blocked
+* [ ] API authorization
+* [ ] RLS enforcement
+* [ ] Server Action authorization
+* [ ] Browser dev tools cannot bypass permissions
+* [ ] SQL injection attempts rejected
+* [ ] XSS input handled safely
+
+---
+
+# Phase 14 — Final Business Workflow
+
+Run the complete ERP workflow:
+
+```
+Customer
+      ↓
+Customer Interaction
+      ↓
+Multiple Follow-ups
+      ↓
+Convert to Enquiry
+      ↓
+Customer Service
+      ↓
+Pricing
+      ↓
+Job
+```
+
+Verify:
+
+* [ ] No data loss
+* [ ] Correct status transitions
+* [ ] Audit trail maintained
+* [ ] Permissions respected at every step
+
+---
+
+# Phase 15 — Sign-off Checklist
+
+Only mark the module complete when all of these are true:
+
+* [ ] All user test cases passed
+* [ ] No critical bugs
+* [ ] No high-priority bugs
+* [ ] RBAC verified
+* [ ] RLS verified
+* [ ] Business workflow verified
+* [ ] Performance acceptable
+* [ ] Security verified
+* [ ] Architecture inspection completed
+* [ ] Product owner/business workflow approved
+
+---
+
+## My recommendation
+
+Create a **Master User Testing Template** with this checklist and reuse it for every Bonzer ERP module (Customers, Interactions, Enquiries, Pricing, Jobs, Accounts, etc.). The specific business tests will change, but the overall testing framework stays the same, giving you a consistent definition of "Done" for every phase.

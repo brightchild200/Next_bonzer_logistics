@@ -1,94 +1,34 @@
-# Plan for 009_customer_interactions_rpc.sql Changes
+# Customer Interactions Module - Media & Location Implementation
 
-## Information Gathered
+## Completed (from architecture inspection)
+- [x] Comprehensive architecture inspection report (C1–C5, H1–H5, M1–M5, L1–L4)
 
-### customers table (from 005_customer_master.sql):
-- Columns: `id`, `customer_ref`, `company_name`, `contact_person`, `email`, `phone`, `address`, `city`, `state`, `country`, `pincode`, `gst_number`, `pan_number`, `kyc_status`, `is_active`, `created_by`, `created_at`, `updated_at`
+## Implementation Tasks
 
-### search_customers() review:
-- Already uses `CROSS JOIN LATERAL` with `NULLIF(TRIM(search_text), '') AS norm` - normalization is already optimal.
-- Columns used: `customer_ref`, `company_name`, `contact_person`, `phone`, `email`, `gst_number`, `pan_number` - all match the actual schema.
-- The RETURN TABLE uses `c.phone AS mobile` which maps correctly.
-- **No changes needed** for search_customers.
+### A. Fix dropdowns (unblock Salesperson)
+- [x] Modify `list-interaction-types.ts` permission gate to allow `interaction:create` OR `interaction:read_own` OR `interaction:read_all`
+- [x] Modify `list-interaction-outcomes.ts` permission gate similarly
+- [x] Modify `list-employees-for-filter.ts` permission gate similarly
 
-### Missing OWNER TO postgres:
-- `can_create_enquiry()` has `SECURITY DEFINER` but is missing `ALTER FUNCTION ... OWNER TO postgres;`
-- Needs to be added.
+### B. Photo upload + preview
+- [x] Create `lib/actions/customer-interactions/mutations/create-attachment.ts` server action
+- [x] Modify `components/create-interaction-form.tsx` to add photo upload field + preview
+- [x] Add reusable image preview/upload UI primitive to `components/ui/data-display.tsx`
 
-### can_create_enquiry() rewrite:
-- Currently `LANGUAGE SQL` - needs to be rewritten to `LANGUAGE plpgsql`
-- Logic must stay identical: returns TRUE if interaction exists AND is_active = TRUE AND enquiry_id IS NULL
+### C. Geolocation + LocationIQ reverse-geocode
+- [x] Create `lib/actions/customer-interactions/mutations/create-location.ts` server action (store lat/lng + reverse-geocode address)
+- [x] Modify `components/create-interaction-form.tsx` to add location capture button + address display
 
-## Plan
+### Migration 014
+- [x] Create `supabase/migrations/014_customer_interactions_media_location.sql`
+  - Create missing interaction permissions (`interaction:read`, `interaction:update`, `interaction:update_all`, `interaction:delete_all`)
+  - Assign to appropriate roles
+  - Fix RLS for `interaction_locations` and `interaction_attachments` + storage bucket
+  - Add `formatted_address` column to `interaction_locations`
 
-### Step 1: Add ALTER FUNCTION ... OWNER TO postgres for can_create_enquiry()
-After the function definition and COMMENT, add:
-```sql
-ALTER FUNCTION public.can_create_enquiry(UUID) OWNER TO postgres;
-```
-
-### Step 2: Rewrite can_create_enquiry() in PL/pgSQL
-Convert from:
-```sql
-LANGUAGE SQL
-STABLE
-SECURITY DEFINER
-SET SEARCH_PATH = ''
-AS $$
-    SELECT EXISTS (
-        SELECT 1
-        FROM public.customer_interactions ci
-        WHERE ci.id = interaction_uuid
-          AND ci.is_active = TRUE
-          AND ci.enquiry_id IS NULL
-    );
-$$;
-```
-
-To equivalent PL/pgSQL:
-```sql
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET SEARCH_PATH = ''
-AS $$
-DECLARE
-    result BOOLEAN;
-BEGIN
-    SELECT EXISTS (
-        SELECT 1
-        FROM public.customer_interactions ci
-        WHERE ci.id = interaction_uuid
-          AND ci.is_active = TRUE
-          AND ci.enquiry_id IS NULL
-    ) INTO result;
-    RETURN result;
-END;
-$$;
-```
-
-## Files to Edit
-- `supabase/migrations/009_customer_interactions_rpc.sql` (only file)
-
-## No Changes Needed
-- search_customers() - normalization already optimal, columns already match schema
-- All other functions remain unchanged
-- No grants, comments, business logic, signatures, or structure changes
-
-## Status: ✅ COMPLETE
-
-### Change 1: Rewrote can_create_enquiry() from LANGUAGE SQL to LANGUAGE plpgsql
-- Kept exact same logic: SELECT EXISTS (...) INTO result; RETURN result;
-- Preserved STABLE, SECURITY DEFINER, SET SEARCH_PATH = ''
-- Business logic unchanged
-
-### Change 2: Added ALTER FUNCTION ... OWNER TO postgres
-- Added: `ALTER FUNCTION public.can_create_enquiry(UUID) OWNER TO postgres;`
-- Placed after COMMENT ON FUNCTION and before REVOKE
-- Consistent with all other SECURITY DEFINER functions in the file
-
-### Verified: search_customers() already optimal
-- Already uses CROSS JOIN LATERAL with NULLIF(TRIM(search_text), '') AS norm
-- All column references (phone, gst_number, pan_number) match customers table schema
-- No changes needed
-
+## Verification
+- [x] TypeScript typecheck passes for all modified files (create-attachment, create-location, create-interaction-form, data-display, list-interaction-types/outcomes, list-employees-for-filter)
+  - Note: pre-existing TS errors exist in `lib/actions/enquiries/*`, `lib/auth/permission-utils.ts`, `lib/nav.ts`, `lib/registry/*` referencing non-existent `PERMISSIONS.ENQUIRY.READ/UPDATE/ASSIGN/CONVERT` — these are unrelated to this module and were present before these changes.
+- [ ] Confirm dropdowns populate for Salesperson role (requires migration 014 + permissions assignment)
+- [ ] Smoke test photo upload + preview
+- [ ] Smoke test location capture + reverse-geocode

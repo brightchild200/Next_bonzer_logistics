@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/db/server';
+import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 import type { CustomerInteraction, InteractionChannel } from '../types';
 
@@ -70,11 +71,14 @@ export async function getInteraction(
     ? authContext.permissions
     : [];
 
-  if (!userPermissions.includes('interaction:read_all')) {
+  const hasReadAll = userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL);
+  const hasReadOwn = userPermissions.includes(PERMISSIONS.INTERACTION.READ_OWN);
+
+  if (!hasReadAll && !hasReadOwn) {
     return { success: false, error: 'Insufficient permissions' };
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('customer_interactions')
     .select(
       `
@@ -105,8 +109,13 @@ export async function getInteraction(
       interaction_duration_minutes
       `
     )
-    .eq('id', interactionId)
-    .single();
+    .eq('id', interactionId);
+
+  if (!hasReadAll && hasReadOwn) {
+    query = query.eq('employee_id', user.id);
+  }
+
+  const { data, error } = await query.single();
 
   if (error || !data) {
     return { success: false, error: 'Interaction not found' };

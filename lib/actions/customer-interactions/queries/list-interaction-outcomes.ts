@@ -49,11 +49,16 @@ export async function listInteractionOutcomes(): Promise<ListInteractionOutcomes
     return { success: false, error: 'Failed to resolve auth context' };
   }
 
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
+const userPermissions: Permission[] = Array.isArray(authContext.permissions)
     ? authContext.permissions
     : [];
 
-  if (!userPermissions.includes('interaction:read_all')) {
+  const canReadInteraction =
+    userPermissions.includes('interaction:read_all') ||
+    userPermissions.includes('interaction:read_own') ||
+    userPermissions.includes('interaction:create');
+
+  if (!canReadInteraction) {
     return { success: false, error: 'Insufficient permissions' };
   }
 

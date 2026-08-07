@@ -143,23 +143,28 @@ export function InteractionDetail({
   const [isEditing, setIsEditing] = useState(false);
   const [isCreatingFollowup, setIsCreatingFollowup] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [followupDueAt, setFollowupDueAt] = useState('');
   const [followupError, setFollowupError] = useState<string | null>(null);
   const [completingFollowupId, setCompletingFollowupId] = useState<string | null>(null);
   const [completionNotes, setCompletionNotes] = useState('');
 
-  const [editData, setEditData] = useState({
+const [editData, setEditData] = useState({
     subject: interaction.subject ?? '',
     notes: interaction.notes,
     interactionAt: interaction.interactionAt.slice(0, 16),
     interactionOutcomeId: interaction.interactionOutcomeId,
     isActive: interaction.isActive,
+    contactPersonName: interaction.contactPersonName,
+    contactPersonMobile: interaction.contactPersonMobile,
+    contactPersonEmail: interaction.contactPersonEmail ?? '',
+    contactPersonDesignation: interaction.contactPersonDesignation ?? '',
+    interactionChannel: interaction.interactionChannel,
+    interactionDurationMinutes: interaction.interactionDurationMinutes ?? null,
   });
 
-  const [isArchiving, setIsArchiving] = useState(false);
-
-  const handleEdit = async (field: keyof typeof editData, value: string | boolean) => {
+  const handleEdit = async (field: keyof typeof editData, value: string | boolean | number | null) => {
     setEditData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -172,6 +177,15 @@ export function InteractionDetail({
     }
     if (!editData.interactionOutcomeId) {
       return 'Outcome is required';
+    }
+    if (!editData.contactPersonName || !editData.contactPersonName.trim()) {
+      return 'Contact person name is required';
+    }
+    if (!editData.contactPersonMobile || !editData.contactPersonMobile.trim()) {
+      return 'Contact person mobile is required';
+    }
+    if (!editData.interactionChannel) {
+      return 'Interaction channel is required';
     }
     return null;
   };
@@ -192,6 +206,12 @@ export function InteractionDetail({
         interactionAt: editData.interactionAt,
         interactionOutcomeId: editData.interactionOutcomeId,
         isActive: editData.isActive,
+        contactPersonName: editData.contactPersonName,
+        contactPersonMobile: editData.contactPersonMobile,
+        contactPersonEmail: editData.contactPersonEmail || null,
+        contactPersonDesignation: editData.contactPersonDesignation || null,
+        interactionChannel: editData.interactionChannel,
+        interactionDurationMinutes: editData.interactionDurationMinutes ?? null,
       });
 
       if (result.success) {
@@ -443,6 +463,30 @@ export function InteractionDetail({
                   <Badge variant={interaction.isActive ? 'default' : 'secondary'}>
                     {interaction.isActive ? 'Active' : 'Inactive'}
                   </Badge>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Contact Person</Label>
+                  <p className="font-medium text-sm">{interaction.contactPersonName || '—'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Contact Mobile</Label>
+                  <p className="text-sm">{interaction.contactPersonMobile || '—'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Contact Email</Label>
+                  <p className="text-sm">{interaction.contactPersonEmail || '—'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Contact Designation</Label>
+                  <p className="text-sm">{interaction.contactPersonDesignation || '—'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Channel</Label>
+                  <Badge variant="secondary">{interaction.interactionChannel}</Badge>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Duration (min)</Label>
+                  <p className="text-sm">{interaction.interactionDurationMinutes !== null && interaction.interactionDurationMinutes !== undefined ? interaction.interactionDurationMinutes : '—'}</p>
                 </div>
               </div>
 
@@ -737,6 +781,91 @@ export function InteractionDetail({
                 </Label>
               </div>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="contactPersonName">Contact Person Name <span className="text-destructive">*</span></Label>
+                <Input
+                  id="contactPersonName"
+                  value={editData.contactPersonName}
+                  onChange={(e) => handleEdit('contactPersonName', e.target.value)}
+                  placeholder="Contact person name"
+                  maxLength={255}
+                  disabled={submitting}
+                />
+              </div>
+              <div>
+                <Label htmlFor="contactPersonMobile">Contact Person Mobile <span className="text-destructive">*</span></Label>
+                <Input
+                  id="contactPersonMobile"
+                  type="tel"
+                  value={editData.contactPersonMobile}
+                  onChange={(e) => handleEdit('contactPersonMobile', e.target.value)}
+                  placeholder="Contact mobile number"
+                  maxLength={50}
+                  disabled={submitting}
+                />
+              </div>
+              <div>
+                <Label htmlFor="contactPersonEmail">Contact Person Email</Label>
+                <Input
+                  id="contactPersonEmail"
+                  type="email"
+                  value={editData.contactPersonEmail}
+                  onChange={(e) => handleEdit('contactPersonEmail', e.target.value)}
+                  placeholder="contact@company.com"
+                  maxLength={255}
+                  disabled={submitting}
+                />
+              </div>
+              <div>
+                <Label htmlFor="contactPersonDesignation">Contact Person Designation</Label>
+                <Input
+                  id="contactPersonDesignation"
+                  value={editData.contactPersonDesignation}
+                  onChange={(e) => handleEdit('contactPersonDesignation', e.target.value)}
+                  placeholder="e.g., Procurement Manager"
+                  maxLength={255}
+                  disabled={submitting}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="interactionChannel">Interaction Channel <span className="text-destructive">*</span></Label>
+                <Select
+                  value={editData.interactionChannel}
+                  onValueChange={(value) => handleEdit('interactionChannel', value)}
+                  disabled={submitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select channel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CALL">Call</SelectItem>
+                    <SelectItem value="VISIT">Visit</SelectItem>
+                    <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+                    <SelectItem value="EMAIL">Email</SelectItem>
+                    <SelectItem value="MEETING">Meeting</SelectItem>
+                    <SelectItem value="VIDEO_CALL">Video Call</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="interactionDurationMinutes">Duration (minutes)</Label>
+                <Input
+                  id="interactionDurationMinutes"
+                  type="number"
+                  min={0}
+                  value={editData.interactionDurationMinutes ?? ''}
+                  onChange={(e) => handleEdit('interactionDurationMinutes', e.target.value ? Number(e.target.value) : null)}
+                  placeholder="30"
+                  disabled={submitting}
+                />
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="notes">Notes</Label>
               <Textarea

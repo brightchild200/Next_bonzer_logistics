@@ -272,6 +272,115 @@ export function CardSkeleton({ className }: { className?: string }) {
   );
 }
 
+/* Image Upload Field */
+interface ImageUploadFieldProps {
+  id?: string;
+  label?: string;
+  description?: string;
+  previewUrl: string | null;
+  onFileSelected: (file: File) => void;
+  onClear: () => void;
+  accept?: string;
+  disabled?: boolean;
+  error?: string | null;
+  className?: string;
+}
+
+export function ImageUploadField({
+  id,
+  label = 'Upload Photo',
+  description,
+  previewUrl,
+  onFileSelected,
+  onClear,
+  accept = 'image/*',
+  disabled,
+  error,
+  className,
+}: ImageUploadFieldProps) {
+  const inputId = id ?? 'image-upload-field';
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      onFileSelected(file);
+    }
+    // Reset input so selecting the same file again re-triggers.
+    event.target.value = '';
+  };
+
+  return (
+    <div className={cn('space-y-2', className)}>
+      {label && <span className="text-xs font-medium text-muted-foreground">{label}</span>}
+
+      {previewUrl ? (
+        <div className="relative inline-block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl}
+            alt="Preview"
+            className="h-40 w-40 rounded-lg border object-cover"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            className="absolute -right-2 -top-2 h-6 w-6 rounded-full"
+            onClick={onClear}
+            disabled={disabled}
+            aria-label="Remove image"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <label
+          htmlFor={inputId}
+          className={cn(
+            'flex h-40 w-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-muted-foreground transition-colors',
+            disabled ? 'cursor-not-allowed opacity-60' : 'hover:border-primary hover:text-primary'
+          )}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <ImageIconPlaceholder />
+          <span className="text-xs font-medium">Click to upload</span>
+        </label>
+      )}
+
+      <input
+        id={inputId}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={handleChange}
+        disabled={disabled}
+      />
+
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function ImageIconPlaceholder() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-8 w-8"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
+  );
+}
+
 /* Page Skeleton */
 export function PageSkeleton() {
   return (

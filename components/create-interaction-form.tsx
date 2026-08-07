@@ -13,6 +13,7 @@ import {
   X,
   Briefcase,
   Send,
+  MapPin,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,6 +29,11 @@ import { Form, FormField, FormItem, FormControl, FormMessage, FormLabel } from '
 import { cn } from '@/lib/utils';
 import { createCustomer } from '@/lib/actions/customers/create-customer';
 import { createInteraction } from '@/lib/actions/customer-interactions/mutations/create-interaction';
+import { createAttachment } from '@/lib/actions/customer-interactions/mutations/create-attachment';
+import { createLocation } from '@/lib/actions/customer-interactions/mutations/create-location';
+import { uploadAttachment } from '@/lib/storage';
+import { getCurrentPosition } from '@/lib/location';
+import { ImageUploadField } from '@/components/ui/data-display';
 import type { InteractionOutcome, InteractionType } from '@/lib/actions/customer-interactions/types';
 import type { CustomerInput } from '@/lib/actions/customers/types';
 
@@ -88,7 +94,18 @@ export function CreateInteractionForm({
     gst_number: '',
     pan_number: '',
   });
-  const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof CustomerInput, string>>>({});
+const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof CustomerInput, string>>>({});
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [location, setLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy: number | null;
+    capturedAt: string;
+  } | null>(null);
+  const [locationAddress, setLocationAddress] = useState<string | null>(null);
+  const [capturingLocation, setCapturingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const form = useForm<CreateInteractionFormData>({
     resolver: zodResolver(createInteractionSchema),
@@ -154,6 +171,47 @@ export function CreateInteractionForm({
     return Object.keys(errors).length === 0;
   }
 
+  const handlePhotoSelected = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setSubmitError('Only image files are allowed');
+      return;
+    }
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(typeof reader.result === 'string' ? reader.result : null);
+    reader.onerror = () => setPhotoPreview(null);
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearPhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  };
+
+  const handleCaptureLocation = async () => {
+    setCapturingLocation(true);
+    setLocationError(null);
+    try {
+      const result = await getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+      if (!result.success) {
+        setLocationError(result.error.message);
+        return;
+      }
+      const { coords } = result.position;
+      setLocation({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        capturedAt: new Date(result.position.timestamp).toISOString(),
+      });
+      setLocationAddress(null);
+    } catch {
+      setLocationError('Failed to capture location. Please try again.');
+    } finally {
+      setCapturingLocation(false);
+    }
+  };
+
   const handleSubmit = async (data: CreateInteractionFormData) => {
     setIsSubmitting(true);
     setSubmitError(null);
@@ -185,8 +243,45 @@ export function CreateInteractionForm({
         interactionDurationMinutes: data.interactionDurationMinutes ?? null,
       });
 
-      if (result.success) {
-        router.push(`/customer-interactions/${result.interaction.id}`);
+if (result.success) {
+        const interactionId = result.interaction.id;
+
+        // Upload photo (if selected) and persist attachment metadata.
+        if (photoFile) {
+          const uploadResult = await uploadAttachment({
+            interactionId,
+            file: photoFile,
+            uploadedBy: result.interaction.createdBy,
+          });
+
+          if (uploadResult.data && !uploadResult.error) {
+            await createAttachment({
+              interactionId,
+              storagePath: uploadResult.data.path,
+              originalName: uploadResult.data.originalName,
+              mimeType: uploadResult.data.mimeType,
+              fileSize: uploadResult.data.fileSize,
+            });
+          } else {
+            console.error('[createInteractionForm] Photo upload failed:', uploadResult.error?.message);
+          }
+        }
+
+        // Persist captured location (if any).
+        if (location) {
+          const locationResult = await createLocation({
+            interactionId,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracy: location.accuracy,
+            capturedAt: location.capturedAt,
+          });
+          if (locationResult.success) {
+            setLocationAddress(locationResult.location.formattedAddress);
+          }
+        }
+
+        router.push(`/customer-interactions/${interactionId}`);
         router.refresh();
         return;
       }
@@ -281,6 +376,85 @@ export function CreateInteractionForm({
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="country">Country</Label>
                 <Input id="country" value={customerForm.country ?? ''} onChange={(event) => updateCustomerForm('country', event.target.value)} placeholder="India" disabled={isSubmitting} />
+              </div>
+            </CardContent>
+</Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Photo & Location
+              </CardTitle>
+              <CardDescription>
+                Optionally attach a photo and capture the GPS location of this interaction.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-3">
+                  <Label className="text-xs font-medium text-muted-foreground">Photo</Label>
+                  <ImageUploadField
+                    id="interaction-photo"
+                    previewUrl={photoPreview}
+                    onFileSelected={handlePhotoSelected}
+                    onClear={handleClearPhoto}
+                    disabled={isSubmitting}
+                    accept="image/*"
+                    description="JPEG, PNG, WebP or GIF. Max 10MB."
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-xs font-medium text-muted-foreground">Location</Label>
+                  {location ? (
+                    <div className="rounded-lg border p-4">
+                      <p className="text-sm font-medium">
+                        {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                      </p>
+                      {location.accuracy !== null && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Accuracy ±{Math.round(location.accuracy)}m
+                        </p>
+                      )}
+                      {locationAddress && (
+                        <p className="mt-2 text-xs text-muted-foreground">{locationAddress}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No location captured yet.
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleCaptureLocation}
+                    disabled={isSubmitting || capturingLocation}
+                  >
+                    {capturingLocation ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Capturing...
+                      </>
+                    ) : location ? (
+                      <>
+                        <MapPin className="h-4 w-4" />
+                        Recapture Location
+                      </>
+                    ) : (
+                      <>
+                        <MapPin className="h-4 w-4" />
+                        Capture Location
+                      </>
+                    )}
+                  </Button>
+                  {locationError && (
+                    <p className="text-xs text-destructive">{locationError}</p>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
