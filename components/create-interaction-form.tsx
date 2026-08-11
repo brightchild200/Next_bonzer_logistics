@@ -332,15 +332,10 @@ const form = useForm<CreateInteractionFormData>({
     setSubmitError(null);
 
     try {
-      if (!validateCustomerForm()) {
-        return;
-      }
+      if (!validateCustomerForm()) return;
+      if (!(await validateIdentifierConflict())) return;
 
-      if (!(await validateIdentifierConflict())) {
-        return;
-      }
-
-let customerId = currentCustomerId;
+      let customerId = currentCustomerId;
 
       if (!customerId) {
         const customerResult = await createCustomer(customerForm);
@@ -357,6 +352,7 @@ let customerId = currentCustomerId;
         employeeId: data.employeeId,
         interactionTypeId: data.interactionTypeId,
         interactionOutcomeId: data.interactionOutcomeId,
+        interactionChannel: 'VISIT',
         subject: data.subject || null,
         notes: data.notes,
         interactionAt: data.interactionAt,
@@ -367,81 +363,79 @@ let customerId = currentCustomerId;
         interactionDurationMinutes: data.interactionDurationMinutes ?? null,
       });
 
-      if (result.success) {
-        const interactionId = result.interaction.id;
-        const interactionRef = result.interaction.interactionRef;
-
-        // Create follow-up if date/time provided
-        if (data.followupDate && data.followupTime) {
-          const followupDateTime = `${data.followupDate}T${data.followupTime}`;
-          const followupResult = await createFollowup({
-            interactionId,
-            dueAt: followupDateTime,
-            status: 'Pending',
-          });
-          if (!followupResult.success) {
-            console.error('[createInteractionForm] Follow-up creation failed:', followupResult.error);
-          }
-        }
-
-        // Upload photo (if selected) and persist attachment metadata.
-        if (photoFile) {
-          const uploadResult = await uploadAttachment({
-            interactionId,
-            file: photoFile,
-            uploadedBy: result.interaction.createdBy,
-          });
-
-          if (uploadResult.data && !uploadResult.error) {
-            await createAttachment({
-              interactionId,
-              storagePath: uploadResult.data.path,
-              originalName: uploadResult.data.originalName,
-              mimeType: uploadResult.data.mimeType,
-              fileSize: uploadResult.data.fileSize,
-            });
-          } else {
-            console.error('[createInteractionForm] Photo upload failed:', uploadResult.error?.message);
-          }
-        }
-
-        let locationData = location;
-        if (!locationData) {
-          try {
-            const captured = await getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
-            if (captured.success) {
-              const { coords } = captured.position;
-              locationData = {
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-                accuracy: coords.accuracy,
-                capturedAt: new Date(captured.position.timestamp).toISOString(),
-              };
-            }
-          } catch {
-            // Location is optional for the backend flow.
-          }
-        }
-
-        if (locationData) {
-          const locationResult = await createLocation({
-            interactionId,
-            latitude: locationData.latitude,
-            longitude: locationData.longitude,
-            accuracy: locationData.accuracy,
-            capturedAt: locationData.capturedAt,
-          });
-          if (locationResult.success) {
-            setLocationAddress(locationResult.location.formattedAddress);
-          }
-        }
-
-router.push(`/customer-interactions/${interactionRef}`);
-        router.refresh();
+      if (!result.success) {
+        setSubmitError(result.error);
         return;
       }
 
-      setSubmitError(result.error);
+      const interactionId = result.interaction.id;
+      const interactionRef = result.interaction.interactionRef;
+
+      if (data.followupDate && data.followupTime) {
+        const followupDateTime = `${data.followupDate}T${data.followupTime}`;
+        const followupResult = await createFollowup({
+          interactionId,
+          dueAt: followupDateTime,
+          status: 'Pending',
+        });
+        if (!followupResult.success) {
+          console.error('[createInteractionForm] Follow-up creation failed:', followupResult.error);
+        }
+      }
+
+      if (photoFile) {
+        const uploadResult = await uploadAttachment({
+          interactionId,
+          file: photoFile,
+          uploadedBy: result.interaction.createdBy,
+        });
+
+        if (uploadResult.data && !uploadResult.error) {
+          await createAttachment({
+            interactionId,
+            storagePath: uploadResult.data.path,
+            originalName: uploadResult.data.originalName,
+            mimeType: uploadResult.data.mimeType,
+            fileSize: uploadResult.data.fileSize,
+          });
+        } else {
+          console.error('[createInteractionForm] Photo upload failed:', uploadResult.error?.message);
+        }
+      }
+
+      let locationData = location;
+      if (!locationData) {
+        try {
+          const captured = await getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+          if (captured.success) {
+            const { coords } = captured.position;
+            locationData = {
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              accuracy: coords.accuracy,
+              capturedAt: new Date(captured.position.timestamp).toISOString(),
+            };
+          }
+        } catch {
+          // Location is optional for the backend flow.
+        }
+      }
+
+      if (locationData) {
+        const locationResult = await createLocation({
+          interactionId,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          accuracy: locationData.accuracy,
+          capturedAt: locationData.capturedAt,
+        });
+        if (locationResult.success) {
+          setLocationAddress(locationResult.location.formattedAddress);
+        }
+      }
+
+      router.push(`/customer-interactions/${interactionRef}`);
+      router.refresh();
     } catch {
       setSubmitError('Failed to create interaction');
     } finally {
@@ -576,7 +570,7 @@ router.push(`/customer-interactions/${interactionRef}`);
                 <Input id="country" value={customerForm.country ?? ''} onChange={(event) => updateCustomerForm('country', event.target.value)} placeholder="India" disabled={isSubmitting} />
               </div>
             </CardContent>
-</Card>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -809,13 +803,13 @@ router.push(`/customer-interactions/${interactionRef}`);
                     </FormItem>
                   )}
                 />
-</div>
+              </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="followupDate"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1.5">
                         <Calendar className="h-4 w-4" />
@@ -824,7 +818,7 @@ router.push(`/customer-interactions/${interactionRef}`);
                       <FormControl>
                         <Input
                           type="date"
-                          className={cn(field.fieldState?.invalid && 'border-destructive')}
+                          className={cn(fieldState.invalid && 'border-destructive')}
                           value={field.value ?? ''}
                           onChange={(e) => field.onChange(e.target.value)}
                           onBlur={field.onBlur}
@@ -839,7 +833,7 @@ router.push(`/customer-interactions/${interactionRef}`);
                 <FormField
                   control={form.control}
                   name="followupTime"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4" />
@@ -848,7 +842,7 @@ router.push(`/customer-interactions/${interactionRef}`);
                       <FormControl>
                         <Input
                           type="time"
-                          className={cn(field.fieldState?.invalid && 'border-destructive')}
+                          className={cn(fieldState.invalid && 'border-destructive')}
                           value={field.value ?? ''}
                           onChange={(e) => field.onChange(e.target.value)}
                           onBlur={field.onBlur}
@@ -859,33 +853,32 @@ router.push(`/customer-interactions/${interactionRef}`);
                     </FormItem>
                   )}
                 />
-              </div>
 
               <FormField
                 control={form.control}
                 name="interactionDurationMinutes"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1.5">
-                        <span className="inline-flex h-4 w-4 items-center justify-center text-sm">⏱</span>
-                        Duration (minutes, optional)
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder="30"
-                          className={cn(fieldState.invalid && 'border-destructive')}
-                          value={field.value ?? ''}
-                          onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
-                          onBlur={field.onBlur}
-                          disabled={isSubmitting}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                render={({ field, fieldState }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5">
+                      <span className="inline-flex h-4 w-4 items-center justify-center text-sm">⏱</span>
+                      Duration (minutes, optional)
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="30"
+                        className={cn(fieldState.invalid && 'border-destructive')}
+                        value={field.value ?? ''}
+                        onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
+                        onBlur={field.onBlur}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               </div>
 
               <FormField

@@ -49,6 +49,14 @@ export type Enquiry = {
   status: string;
   expected_shipment_date: string | null;
   notes: string | null;
+  assigned_customer_service_id: string | null;
+  assigned_by: string | null;
+  assigned_at: string | null;
+  quoted_at: string | null;
+  won_at: string | null;
+  lost_at: string | null;
+  archived_at: string | null;
+  closed_by: string | null;
   created_at: string;
   updated_at: string;
 };

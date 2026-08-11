@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
+import { ExportActions } from '@/components/export-actions';
+import { buildWorkbook, downloadWorkbook, formatDateForFile, openPrintWindow } from '@/lib/export-utils';
 import {
   Table,
   TableBody,
@@ -67,9 +69,59 @@ export default function ShipmentsPage() {
   return (
     <div className="animate-fade-in">
       <PageHeader title="Shipments" description={`${total} shipments`}>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <Download className="h-4 w-4" /> Export
-        </Button>
+        <ExportActions
+          exportLabel="Export"
+          printLabel="Print"
+          disableExport={loading}
+          disablePrint={loading}
+          onExport={async ({ from, to }) => {
+            let query = supabase
+              .from('shipments')
+              .select('*', { count: 'exact' })
+              .order('created_at', { ascending: false });
+            if (search) {
+              query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%,origin.ilike.%${search}%,destination.ilike.%${search}%`);
+            }
+            if (from) query = query.gte('created_at', from);
+            if (to) query = query.lte('created_at', to);
+            const { data } = await query.range(0, 9999);
+            const rows = (data ?? []).map((s) => ({
+              Reference: s.reference,
+              Customer: s.customer_name ?? '',
+              Origin: s.origin ?? '',
+              Destination: s.destination ?? '',
+              Mode: s.mode,
+              Carrier: s.carrier ?? '',
+              Status: s.status,
+              ETA: s.eta ?? '',
+              Currency: s.currency,
+              Value: s.value,
+            }));
+            const wb = buildWorkbook(rows, 'Shipments');
+            downloadWorkbook(wb, `shipments_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
+          }}
+          onPrint={async ({ from, to }) => {
+            let query = supabase
+              .from('shipments')
+              .select('*', { count: 'exact' })
+              .order('created_at', { ascending: false });
+            if (search) {
+              query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%,origin.ilike.%${search}%,destination.ilike.%${search}%`);
+            }
+            if (from) query = query.gte('created_at', from);
+            if (to) query = query.lte('created_at', to);
+            const { data } = await query.range(0, 9999);
+            const tableHtml = `
+              <table>
+                <thead><tr><th>Ref</th><th>Customer</th><th>Route</th><th>Mode</th><th>Status</th><th>ETA</th></tr></thead>
+                <tbody>
+                  ${(data ?? []).map((s) => `<tr><td>${s.reference}</td><td>${s.customer_name ?? ''}</td><td>${s.origin ?? ''} → ${s.destination ?? ''}</td><td>${s.mode}</td><td>${s.status}</td><td>${s.eta ? new Date(s.eta).toLocaleDateString() : ''}</td></tr>`).join('')}
+                </tbody>
+              </table>`;
+            const win = openPrintWindow({ title: 'Shipments', subtitle: `From ${from || 'start'} to ${to || 'now'}`, tableHtml });
+            win?.print();
+          }}
+        />
         <Button size="sm" className="gap-1.5">
           <Plus className="h-4 w-4" /> New Shipment
         </Button>

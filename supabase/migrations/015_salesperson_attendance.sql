@@ -300,8 +300,8 @@ WITH CHECK (
         OR public.current_user_has_permission('attendance:check_out')
     )
     AND attendance_id IN (
-        SELECT id FROM public.sales_attendance
-        WHERE salesperson_id = (SELECT auth.uid())
+        SELECT sa.id FROM public.sales_attendance sa
+        WHERE sa.salesperson_id = (SELECT auth.uid())
     )
 );
 
@@ -318,7 +318,7 @@ USING (
     OR (
         public.current_user_has_permission('attendance:read_team')
         AND attendance_id IN (
-            SELECT id FROM public.sales_attendance sa
+            SELECT sa.id FROM public.sales_attendance sa
             JOIN public.user_roles ur ON ur.user_id = sa.salesperson_id
             JOIN public.roles r ON r.id = ur.role_id
             WHERE r.name = 'salesperson'
@@ -328,8 +328,8 @@ USING (
     OR (
         public.current_user_has_permission('attendance:read_own')
         AND attendance_id IN (
-            SELECT id FROM public.sales_attendance
-            WHERE salesperson_id = (SELECT auth.uid())
+            SELECT sa.id FROM public.sales_attendance sa
+            WHERE sa.salesperson_id = (SELECT auth.uid())
         )
     )
 );
@@ -352,40 +352,5 @@ COMMENT ON TABLE public.sales_attendance IS
 
 COMMENT ON TABLE public.sales_attendance_locations IS
 'Immutable GPS audit trail for attendance check-in/check-out. Never displayed to any user.';
-
-COMMIT;
-
--- ============================================================================
--- BONZER LOGISTICS
--- 015 - INTERACTION FOLLOW-UPS RLS: SUPPORT READ_OWN
--- ============================================================================
--- PURPOSE
---   Update interaction_followups SELECT policy to support both:
---     • follow_up:read_all  → all follow-ups
---     • follow_up:read_own  → only follow-ups where parent interaction's employee_id = current user
--- ============================================================================
-
-BEGIN;
-
--- Drop existing SELECT policy
-DROP POLICY IF EXISTS interaction_followups_select
-ON public.interaction_followups;
-
--- Create new SELECT policy supporting both READ_ALL and READ_OWN
-CREATE POLICY interaction_followups_select
-ON public.interaction_followups
-FOR SELECT
-TO authenticated
-USING (
-    current_user_has_permission('follow_up:read_all')
-    OR (
-        current_user_has_permission('follow_up:read_own')
-        AND interaction_id IN (
-            SELECT id
-            FROM public.customer_interactions
-            WHERE employee_id = (select auth.uid())
-        )
-    )
-);
 
 COMMIT;

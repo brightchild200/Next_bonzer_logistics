@@ -20,10 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/lib/supabase';
-import type { Customer, Enquiry } from '@/lib/supabase';
+import type { Customer } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { createEnquiry } from '@/lib/actions/enquiries';
 
 const steps = ['Customer', 'Shipment Details', 'Cargo & Review'];
 
@@ -44,7 +44,7 @@ export function EnquiryForm({
 }: {
   open: boolean;
   setOpen: (v: boolean) => void;
-  enquiry?: Enquiry | null;
+  enquiry?: { id: string; reference: string; status: string; customer_id?: string | null; customer_name?: string | null; origin?: string | null; destination?: string | null; mode?: string; cargo_type?: string | null; weight_kg?: number | null; volume_cbm?: number | null; incoterm?: string | null; expected_shipment_date?: string | null; notes?: string | null } | null;
   onSaved?: () => void;
 }) {
   const router = useRouter();
@@ -67,19 +67,14 @@ export function EnquiryForm({
 
   useEffect(() => {
     if (open) {
-      supabase
-        .from('customers')
-        .select('*')
-        .order('company_name')
-        .then(({ data }) => setCustomers(data ?? []));
-
+      // Supabase client not available in server actions, customers fetched from parent
       if (enquiry) {
         setForm({
           customer_id: enquiry.customer_id ?? '',
           customer_name: enquiry.customer_name ?? '',
           origin: enquiry.origin ?? '',
           destination: enquiry.destination ?? '',
-          mode: enquiry.mode,
+          mode: enquiry.mode ?? 'sea',
           cargo_type: enquiry.cargo_type ?? '',
           weight_kg: enquiry.weight_kg?.toString() ?? '',
           volume_cbm: enquiry.volume_cbm?.toString() ?? '',
@@ -131,30 +126,27 @@ export function EnquiryForm({
       incoterm: form.incoterm,
       expected_shipment_date: form.expected_shipment_date || null,
       notes: form.notes,
-      status: enquiry?.status ?? 'new',
+      status: (enquiry?.status ?? 'new') as 'new' | 'quoted' | 'won' | 'lost' | 'archived',
     };
 
-    const { error } = enquiry
-      ? await supabase.from('enquiries').update(payload).eq('id', enquiry.id)
-      : await supabase.from('enquiries').insert(payload);
+    try {
+      const result = await createEnquiry(payload);
 
-    if (error) {
-      toast.error(error.message);
+      if (!result.success) {
+        toast.error(result.error);
+        setLoading(false);
+        return;
+      }
+
+      toast.success('Enquiry created successfully');
       setLoading(false);
-      return;
+      setOpen(false);
+      onSaved?.();
+    } catch (err) {
+      console.error('Create enquiry error:', err);
+      toast.error('Failed to create enquiry');
+      setLoading(false);
     }
-
-    // Log activity
-    await supabase.from('activity_log').insert({
-      entity_type: 'enquiry',
-      action: enquiry ? 'Updated enquiry' : 'Created new enquiry',
-      description: `${payload.reference} — ${payload.origin} → ${payload.destination}`,
-    });
-
-    toast.success(enquiry ? 'Enquiry updated' : 'Enquiry created successfully');
-    setLoading(false);
-    setOpen(false);
-    onSaved?.();
   };
 
   return (

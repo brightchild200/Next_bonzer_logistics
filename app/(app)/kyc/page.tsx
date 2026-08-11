@@ -52,6 +52,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { StatusBadge } from '@/components/status-badge';
 import { KycDetailDialog } from '@/components/kyc-detail-dialog';
+import { ExportActions } from '@/components/export-actions';
+import { buildWorkbook, downloadWorkbook, formatDateForFile, openPrintWindow } from '@/lib/export-utils';
 import { listKycRecords } from '@/lib/actions/kyc/list-kyc';
 import { updateKycStatus } from '@/lib/actions/kyc/update-kyc-status';
 import type { KycRecord, KycStatusFilter } from '@/lib/actions/kyc/types';
@@ -196,12 +198,50 @@ export default function KycPage() {
           { label: 'KYC', isCurrent: true },
         ]}
       >
-        <div className="hidden items-center gap-2 md:flex">
-          <Button variant="outline" size="sm" className="gap-1.5" disabled={total === 0}>
-            <Download className="h-4 w-4" />
-            Export
-          </Button>
-        </div>
+        <ExportActions
+          disableExport={total === 0 || loading}
+          disablePrint={total === 0 || loading}
+          onExport={async ({ from, to }) => {
+            const result = await listKycRecords({
+              search,
+              status: statusFilter,
+              page: 0,
+              pageSize: 1000,
+              sortBy,
+              sortOrder: sortDir,
+            });
+            if (!result.success) return;
+            const rows = result.records.map((r) => ({
+              Customer: r.company_name,
+              Reference: r.customer_ref,
+              City: r.city ?? '',
+              State: r.state ?? '',
+              Status: r.kyc_status,
+              'Latest Enquiry': r.latest_enquiry_ref ?? '',
+              Updated: r.updated_at,
+            }));
+            const wb = buildWorkbook(rows, 'KYC');
+            downloadWorkbook(wb, `kyc_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
+          }}
+          onPrint={async ({ from, to }) => {
+            const result = await listKycRecords({
+              search,
+              status: statusFilter,
+              page: 0,
+              pageSize: 1000,
+              sortBy,
+              sortOrder: sortDir,
+            });
+            if (!result.success) return;
+            const tableHtml = `
+              <table>
+                <thead><tr><th>Customer</th><th>Ref</th><th>City</th><th>State</th><th>Status</th><th>Latest Enquiry</th></tr></thead>
+                <tbody>${result.records.map((r) => `<tr><td>${r.company_name}</td><td>${r.customer_ref}</td><td>${r.city ?? ''}</td><td>${r.state ?? ''}</td><td>${r.kyc_status}</td><td>${r.latest_enquiry_ref ?? ''}</td></tr>`).join('')}</tbody>
+              </table>`;
+            const win = openPrintWindow({ title: 'KYC Records', subtitle: `From ${from || 'start'} to ${to || 'now'}`, tableHtml });
+            win?.print();
+          }}
+        />
       </PageHeader>
 
       {/* Search & Filters */}

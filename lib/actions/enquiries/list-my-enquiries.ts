@@ -3,9 +3,9 @@
 import { createClient } from '@/lib/db/server';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
-import type { CustomerServiceInboxFilters, EnquiryWorkflowRecord } from './types';
+import type { EnquiryWorkflowRecord, ListEnquiriesFilters } from './types';
 
-export interface ListCustomerServiceEnquiriesResult {
+export interface ListMyEnquiriesResult {
   success: true;
   enquiries: EnquiryWorkflowRecord[];
   total: number;
@@ -13,18 +13,16 @@ export interface ListCustomerServiceEnquiriesResult {
   offset: number;
 }
 
-export interface ListCustomerServiceEnquiriesError {
+export interface ListMyEnquiriesError {
   success: false;
   error: string;
 }
 
-export type ListCustomerServiceEnquiriesResponse =
-  | ListCustomerServiceEnquiriesResult
-  | ListCustomerServiceEnquiriesError;
+export type ListMyEnquiriesResponse = ListMyEnquiriesResult | ListMyEnquiriesError;
 
-export async function listCustomerServiceEnquiries(
-  filters: CustomerServiceInboxFilters = {}
-): Promise<ListCustomerServiceEnquiriesResponse> {
+export async function listMyEnquiries(
+  filters: ListEnquiriesFilters = {}
+): Promise<ListMyEnquiriesResponse> {
   const supabase = createClient();
 
   const {
@@ -49,22 +47,22 @@ export async function listCustomerServiceEnquiries(
     : [];
 
   if (
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM) &&
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.ASSIGN_CS) &&
-    !userPermissions.includes(PERMISSIONS.ADMIN.USER_READ)
+    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_OWN) &&
+    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM)
   ) {
     return { success: false, error: 'Insufficient permissions' };
   }
 
-  const limit = Math.min(Math.max(filters.limit ?? 20, 1), 100);
+  const limit = Math.min(Math.max(filters.limit ?? 5, 1), 100);
   const offset = Math.max(filters.offset ?? 0, 0);
   const sortBy = filters.sortBy ?? 'updated_at';
   const sortDir = filters.sortDir ?? 'desc';
+
   const statuses = Array.isArray(filters.status)
     ? filters.status
     : filters.status
       ? [filters.status]
-      : ['new', 'quoted'];
+      : undefined;
 
   let query = supabase
     .from('enquiries')
@@ -98,15 +96,18 @@ export async function listCustomerServiceEnquiries(
       `,
       { count: 'exact' }
     )
+    .eq('owner_id', user.id)
     .order(sortBy, { ascending: sortDir === 'asc' })
     .range(offset, offset + limit - 1);
 
-  if (statuses.length > 0) {
+  if (statuses && statuses.length > 0) {
     query = query.in('status', statuses);
   }
 
-  if (filters.assignedCustomerServiceId) {
-    query = query.eq('assigned_customer_service_id', filters.assignedCustomerServiceId);
+  if (filters.search) {
+    query = query.or(
+      `reference.ilike.%${filters.search}%,customer_name.ilike.%${filters.search}%,origin.ilike.%${filters.search}%,destination.ilike.%${filters.search}%`
+    );
   }
 
   const { data, error, count } = await query;

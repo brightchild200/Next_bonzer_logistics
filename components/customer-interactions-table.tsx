@@ -36,6 +36,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { ExportActions } from '@/components/export-actions';
+import { buildWorkbook, downloadWorkbook, formatDateForFile, openPrintWindow } from '@/lib/export-utils';
 import { listInteractions } from '@/lib/actions/customer-interactions/queries/list-interactions';
 import type { CustomerInteraction } from '@/lib/actions/customer-interactions/types';
 import type { InteractionType, InteractionOutcome } from '@/lib/actions/customer-interactions/types';
@@ -77,6 +79,37 @@ interface CustomerInteractionsTableProps {
   interactionOutcomes: InteractionOutcome[];
   employees: { id: string; fullName: string; employeeCode: string | null }[];
   customers: CustomerOption[];
+}
+
+function buildInteractionsTableHtml(rows: CustomerInteraction[]) {
+  const body = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${row.interactionRef}</td>
+          <td>${row.companyName || row.customerRef || row.customerId}</td>
+          <td>${new Date(row.interactionAt).toLocaleDateString()}</td>
+          <td>${row.subject ?? ''}</td>
+          <td>${row.interactionChannel}</td>
+          <td>${row.isActive ? 'Active' : 'Inactive'}</td>
+        </tr>`
+    )
+    .join('');
+
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Reference</th>
+          <th>Customer</th>
+          <th>Date</th>
+          <th>Subject</th>
+          <th>Channel</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>`;
 }
 
 export function CustomerInteractionsTable({
@@ -193,9 +226,58 @@ export function CustomerInteractionsTable({
         title="Customer Interactions"
         description={`${total} interactions in your workspace`}
       >
-        <Button variant="outline" size="sm" className="gap-1.5" disabled={loading}>
-          <Flag className="h-4 w-4" /> Export
-        </Button>
+        <ExportActions
+          exportLabel="Export"
+          printLabel="Print"
+          disableExport={loading}
+          disablePrint={loading}
+          onExport={async ({ from, to }) => {
+            const result = await listInteractions({
+              customerId: customerId === '__all__' ? undefined : customerId,
+              employeeId: employeeId === '__all__' ? undefined : employeeId,
+              interactionTypeId: interactionTypeId === '__all__' ? undefined : interactionTypeId,
+              interactionOutcomeId: interactionOutcomeId === '__all__' ? undefined : interactionOutcomeId,
+              dateFrom: from || dateFrom || undefined,
+              dateTo: to || dateTo || undefined,
+              isActive,
+              search: search || undefined,
+              limit: 1000,
+              offset: 0,
+            });
+            if (!result.success) return;
+            const rows = result.interactions.map((row) => ({
+              Reference: row.interactionRef,
+              Customer: row.companyName || row.customerRef || row.customerId,
+              Date: row.interactionAt,
+              Subject: row.subject ?? '',
+              Channel: row.interactionChannel,
+              Status: row.isActive ? 'Active' : 'Inactive',
+            }));
+            const workbook = buildWorkbook(rows, 'Interactions');
+            downloadWorkbook(workbook, `interactions_${formatDateForFile(from || dateFrom || 'all')}_${formatDateForFile(to || dateTo || 'all')}.xlsx`);
+          }}
+          onPrint={async ({ from, to }) => {
+            const result = await listInteractions({
+              customerId: customerId === '__all__' ? undefined : customerId,
+              employeeId: employeeId === '__all__' ? undefined : employeeId,
+              interactionTypeId: interactionTypeId === '__all__' ? undefined : interactionTypeId,
+              interactionOutcomeId: interactionOutcomeId === '__all__' ? undefined : interactionOutcomeId,
+              dateFrom: from || dateFrom || undefined,
+              dateTo: to || dateTo || undefined,
+              isActive,
+              search: search || undefined,
+              limit: 1000,
+              offset: 0,
+            });
+            if (!result.success) return;
+            const win = openPrintWindow({
+              title: 'Customer Interactions',
+              subtitle: `From ${from || dateFrom || 'start'} to ${to || dateTo || 'now'}`,
+              tableHtml: buildInteractionsTableHtml(result.interactions),
+            });
+            win?.print();
+          }}
+        />
         <Button size="sm" className="gap-1.5" onClick={() => window.location.href = '/customer-interactions/new'}>
           <Plus className="h-4 w-4" /> New Interaction
         </Button>
