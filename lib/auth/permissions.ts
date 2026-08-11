@@ -24,16 +24,17 @@ export const PERMISSIONS = {
     UPDATE: 'customer:update',
     DEACTIVATE: 'customer:deactivate',
   },
-  ENQUIRY: {
+ENQUIRY: {
     CREATE: 'enquiry:create',
     READ_ASSIGNED: 'enquiry:read_assigned',
     READ_TEAM: 'enquiry:read_team',
+    READ_ALL: 'enquiry:read_all',
     UPDATE_CS_FIELDS: 'enquiry:update_cs_fields',
     READ_OWN: 'enquiry:read_own',
     UPDATE_SALES_FIELDS: 'enquiry:update_sales_fields',
     ASSIGN_CS: 'enquiry:assign_cs',
     CONVERT_JOB: 'enquiry:convert_job',
-},
+  },
   INTERACTION: {
     CREATE: 'interaction:create',
     READ_ALL: 'interaction:read_all',
