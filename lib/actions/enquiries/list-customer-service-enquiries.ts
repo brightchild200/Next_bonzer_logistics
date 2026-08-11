@@ -49,8 +49,8 @@ export async function listCustomerServiceEnquiries(
     : [];
 
   if (
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ) &&
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.ASSIGN) &&
+    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM) &&
+    !userPermissions.includes(PERMISSIONS.ENQUIRY.ASSIGN_CS) &&
     !userPermissions.includes(PERMISSIONS.ADMIN.USER_READ)
   ) {
     return { success: false, error: 'Insufficient permissions' };

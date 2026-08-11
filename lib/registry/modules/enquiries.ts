@@ -9,7 +9,7 @@ export const enquiries: ModuleConfig = {
   route: '/enquiries',
   icon: FileText,
   category: ModuleCategory.ENQUIRIES,
-  permission: PERMISSIONS.ENQUIRY.READ,
+  permission: PERMISSIONS.ENQUIRY.READ_TEAM,
   order: 2,
   enabled: true,
 };

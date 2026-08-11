@@ -110,6 +110,8 @@ export interface InteractionFilters {
 
 export interface FollowupFilters {
   interactionId?: string;
+  customerId?: string;
+  employeeId?: string;
   status?: FollowupStatus;
   dueFrom?: string;
   dueTo?: string;
@@ -168,6 +170,12 @@ export interface InteractionFollowup {
   id: string;
   followupRef: string;
   interactionId: string;
+  interactionRef: string;
+  customerId: string;
+  customerRef: string;
+  companyName: string;
+  employeeId: string;
+  subject: string | null;
   dueAt: string;
   status: FollowupStatus;
   completionNotes: string | null;

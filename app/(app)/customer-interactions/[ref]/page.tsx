@@ -1,4 +1,4 @@
-import { getInteraction } from '@/lib/actions/customer-interactions/queries/get-interaction';
+import { getInteractionByRef } from '@/lib/actions/customer-interactions/queries/get-interaction-by-ref';
 import { listInteractionTypes } from '@/lib/actions/customer-interactions/queries/list-interaction-types';
 import { listInteractionOutcomes } from '@/lib/actions/customer-interactions/queries/list-interaction-outcomes';
 import { listFollowups } from '@/lib/actions/customer-interactions/queries/list-followups';
@@ -6,19 +6,19 @@ import { getEmployee } from '@/lib/actions/customer-interactions/queries/get-emp
 import { InteractionDetail } from '@/components/interaction-detail';
 
 interface InteractionDetailPageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ ref: string }>;
 }
 
 export default async function InteractionDetailPage({
   params,
 }: InteractionDetailPageProps) {
-  const { id } = await params;
+  const { ref } = await params;
 
   const [interactionRes, typesRes, outcomesRes, followupsRes] = await Promise.all([
-    getInteraction(id),
+    getInteractionByRef(ref),
     listInteractionTypes(),
     listInteractionOutcomes(),
-    listFollowups({ interactionId: id, limit: 50, offset: 0 }),
+    listFollowups({ interactionId: '', limit: 50, offset: 0 }),
   ]);
 
   const interaction = interactionRes.success ? interactionRes.interaction : null;
@@ -28,7 +28,13 @@ export default async function InteractionDetailPage({
 
   let employee = null;
   if (interaction) {
-    const employeeRes = await getEmployee(interaction.employeeId);
+    const [followupsRes2, employeeRes] = await Promise.all([
+      listFollowups({ interactionId: interaction.id, limit: 50, offset: 0 }),
+      getEmployee(interaction.employeeId),
+    ]);
+    if (followupsRes2.success) {
+      // followups already fetched above but need correct interactionId
+    }
     if (employeeRes.success) {
       employee = employeeRes.employee;
     }
@@ -47,12 +53,16 @@ export default async function InteractionDetailPage({
     );
   }
 
+  // Re-fetch followups with correct interactionId
+  const followupsResCorrect = await listFollowups({ interactionId: interaction.id, limit: 50, offset: 0 });
+  const followupsCorrect = followupsResCorrect.success ? followupsResCorrect.followups : [];
+
   return (
     <InteractionDetail
       interaction={interaction}
       interactionTypes={interactionTypes}
       interactionOutcomes={interactionOutcomes}
-      followups={followups}
+      followups={followupsCorrect}
       employee={employee}
     />
   );

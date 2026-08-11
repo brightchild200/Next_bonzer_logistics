@@ -18,7 +18,7 @@ export function isCustomerServiceStatus(status: string) {
 
 export function canAssignEnquiry(permissions: Permission[]) {
   return (
-    permissions.includes(PERMISSIONS.ENQUIRY.ASSIGN) ||
+    permissions.includes(PERMISSIONS.ENQUIRY.ASSIGN_CS) ||
     permissions.includes(PERMISSIONS.ADMIN.USER_UPDATE)
   );
 }

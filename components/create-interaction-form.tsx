@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Calendar,
+  Clock,
   Loader2,
   FileText,
   Mail,
@@ -13,7 +14,6 @@ import {
   X,
   Briefcase,
   Send,
-  MapPin,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,9 +28,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Form, FormField, FormItem, FormControl, FormMessage, FormLabel } from '@/components/ui/form';
 import { cn } from '@/lib/utils';
 import { createCustomer } from '@/lib/actions/customers/create-customer';
+import { checkCustomerIdentifierConflict } from '@/lib/actions/customers/check-customer-identifiers';
 import { createInteraction } from '@/lib/actions/customer-interactions/mutations/create-interaction';
+import { createFollowup } from '@/lib/actions/customer-interactions/mutations/create-followup';
 import { createAttachment } from '@/lib/actions/customer-interactions/mutations/create-attachment';
 import { createLocation } from '@/lib/actions/customer-interactions/mutations/create-location';
+import { searchCompanyNames, type CompanyNameResult } from '@/lib/actions/customers/search-company-names';
 import { uploadAttachment } from '@/lib/storage';
 import { getCurrentPosition } from '@/lib/location';
 import { ImageUploadField } from '@/components/ui/data-display';
@@ -56,12 +59,14 @@ const createInteractionSchema = z.object({
   subject: z.string().max(255).optional(),
   notes: z.string().min(1, 'Notes are required'),
   interactionAt: z.string().min(1, 'Date and time is required'),
+ 
   contactPersonName: z.string().min(1, 'Contact person name is required').max(255),
   contactPersonMobile: z.string().min(1, 'Contact person mobile is required').max(50),
   contactPersonEmail: z.string().email('Invalid email format').max(255).nullable().optional(),
   contactPersonDesignation: z.string().max(255).nullable().optional(),
-  interactionChannel: z.enum(['CALL', 'VISIT', 'WHATSAPP', 'EMAIL', 'MEETING', 'VIDEO_CALL']),
   interactionDurationMinutes: z.number().int().min(0).nullable().optional(),
+  followupDate: z.string().optional(),
+  followupTime: z.string().optional(),
 });
 
 type CreateInteractionFormData = z.infer<typeof createInteractionSchema>;
@@ -81,6 +86,11 @@ export function CreateInteractionForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [employees] = useState<EmployeeOption[]>(initialEmployees);
+  const [companySuggestions, setCompanySuggestions] = useState<CompanyNameResult[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [hasSelectedCompany, setHasSelectedCompany] = useState(false);
   const [customerForm, setCustomerForm] = useState<CustomerInput>({
     company_name: '',
     contact_person: '',
@@ -106,8 +116,10 @@ const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof Custom
   const [locationAddress, setLocationAddress] = useState<string | null>(null);
   const [capturingLocation, setCapturingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [currentCustomerId, setCurrentCustomerId] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const form = useForm<CreateInteractionFormData>({
+const form = useForm<CreateInteractionFormData>({
     resolver: zodResolver(createInteractionSchema),
     defaultValues: {
       employeeId: '',
@@ -116,7 +128,8 @@ const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof Custom
       subject: '',
       notes: '',
       interactionAt: new Date().toISOString().slice(0, 16),
-      interactionChannel: 'CALL',
+      followupDate: '',
+      followupTime: '',
     },
   });
 
@@ -127,6 +140,101 @@ const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof Custom
     }));
     setCustomerErrors((current) => ({ ...current, [field]: undefined }));
   }
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const searchCompanies = async (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed.length < 2) {
+      setCompanySuggestions([]);
+      setShowSuggestions(false);
+      setSelectedSuggestionIndex(-1);
+      setHasSelectedCompany(false);
+      setCurrentCustomerId(null);
+      return;
+    }
+
+    setIsSearchingCompanies(true);
+    const result = await searchCompanyNames(trimmed, 10);
+    setIsSearchingCompanies(false);
+
+    if (result.success) {
+      setCompanySuggestions(result.companies);
+      setShowSuggestions(true);
+      setSelectedSuggestionIndex(-1);
+
+      const normalized = trimmed.replace(/\\s+/g, ' ').toUpperCase();
+      const exactMatch = result.companies.find(
+        (company) =>
+          company.company_name.trim().replace(/\\s+/g, ' ').toUpperCase() === normalized
+      );
+
+      if (exactMatch) {
+        selectSuggestion(exactMatch);
+      }
+    } else {
+      setCompanySuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const selectSuggestion = (company: CompanyNameResult) => {
+    setCurrentCustomerId(company.id);
+    setHasSelectedCompany(true);
+    setCompanySuggestions([]);
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+    setCustomerForm({
+      company_name: company.company_name,
+      contact_person: company.contact_person ?? '',
+      email: company.email ?? '',
+      phone: company.phone ?? '',
+      address: customerForm.address,
+      city: company.city ?? '',
+      state: company.state ?? '',
+      country: customerForm.country || 'India',
+      pincode: customerForm.pincode,
+      gst_number: company.gst_number ?? '',
+      pan_number: company.pan_number ?? '',
+    });
+  };
+
+  const validateIdentifierConflict = async () => {
+    const gstValue = customerForm.gst_number?.trim();
+    const panValue = customerForm.pan_number?.trim();
+    if (gstValue) {
+      const gstResult = await checkCustomerIdentifierConflict('gst_number', gstValue, currentCustomerId ?? undefined);
+      if (gstResult.success && gstResult.conflict) {
+        setSubmitError(`This GST no. is invalid because it already belongs to ${gstResult.conflict.company_name} (${gstResult.conflict.customer_ref})`);
+        return false;
+      }
+      if (!gstResult.success) {
+        setSubmitError(gstResult.error);
+        return false;
+      }
+    }
+    if (panValue) {
+      const panResult = await checkCustomerIdentifierConflict('pan_number', panValue, currentCustomerId ?? undefined);
+      if (panResult.success && panResult.conflict) {
+        setSubmitError(`This PAN no. is invalid because it already belongs to ${panResult.conflict.company_name} (${panResult.conflict.customer_ref})`);
+        return false;
+      }
+      if (!panResult.success) {
+        setSubmitError(panResult.error);
+        return false;
+      }
+    }
+    return true;
+  };
 
   function validateCustomerForm(): boolean {
     const errors: Partial<Record<keyof CustomerInput, string>> = {};
@@ -212,6 +320,13 @@ const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof Custom
     }
   };
 
+  const handleCompanyNameChange = (value: string) => {
+    setCurrentCustomerId(null);
+    setHasSelectedCompany(false);
+    updateCustomerForm('company_name', value);
+    void searchCompanies(value);
+  };
+
   const handleSubmit = async (data: CreateInteractionFormData) => {
     setIsSubmitting(true);
     setSubmitError(null);
@@ -221,14 +336,24 @@ const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof Custom
         return;
       }
 
-      const customerResult = await createCustomer(customerForm);
-      if (!customerResult.success) {
-        setSubmitError(customerResult.error);
+      if (!(await validateIdentifierConflict())) {
         return;
       }
 
+let customerId = currentCustomerId;
+
+      if (!customerId) {
+        const customerResult = await createCustomer(customerForm);
+        if (!customerResult.success) {
+          setSubmitError(customerResult.error);
+          return;
+        }
+        customerId = customerResult.customer.id;
+        setCurrentCustomerId(customerId);
+      }
+
       const result = await createInteraction({
-        customerId: customerResult.customer.id,
+        customerId,
         employeeId: data.employeeId,
         interactionTypeId: data.interactionTypeId,
         interactionOutcomeId: data.interactionOutcomeId,
@@ -239,12 +364,25 @@ const [customerErrors, setCustomerErrors] = useState<Partial<Record<keyof Custom
         contactPersonMobile: data.contactPersonMobile,
         contactPersonEmail: data.contactPersonEmail || null,
         contactPersonDesignation: data.contactPersonDesignation || null,
-        interactionChannel: data.interactionChannel,
         interactionDurationMinutes: data.interactionDurationMinutes ?? null,
       });
 
-if (result.success) {
+      if (result.success) {
         const interactionId = result.interaction.id;
+        const interactionRef = result.interaction.interactionRef;
+
+        // Create follow-up if date/time provided
+        if (data.followupDate && data.followupTime) {
+          const followupDateTime = `${data.followupDate}T${data.followupTime}`;
+          const followupResult = await createFollowup({
+            interactionId,
+            dueAt: followupDateTime,
+            status: 'Pending',
+          });
+          if (!followupResult.success) {
+            console.error('[createInteractionForm] Follow-up creation failed:', followupResult.error);
+          }
+        }
 
         // Upload photo (if selected) and persist attachment metadata.
         if (photoFile) {
@@ -267,21 +405,38 @@ if (result.success) {
           }
         }
 
-        // Persist captured location (if any).
-        if (location) {
+        let locationData = location;
+        if (!locationData) {
+          try {
+            const captured = await getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+            if (captured.success) {
+              const { coords } = captured.position;
+              locationData = {
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                accuracy: coords.accuracy,
+                capturedAt: new Date(captured.position.timestamp).toISOString(),
+              };
+            }
+          } catch {
+            // Location is optional for the backend flow.
+          }
+        }
+
+        if (locationData) {
           const locationResult = await createLocation({
             interactionId,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            accuracy: location.accuracy,
-            capturedAt: location.capturedAt,
+            latitude: locationData.latitude,
+            longitude: locationData.longitude,
+            accuracy: locationData.accuracy,
+            capturedAt: locationData.capturedAt,
           });
           if (locationResult.success) {
             setLocationAddress(locationResult.location.formattedAddress);
           }
         }
 
-        router.push(`/customer-interactions/${interactionId}`);
+router.push(`/customer-interactions/${interactionRef}`);
         router.refresh();
         return;
       }
@@ -322,14 +477,57 @@ if (result.success) {
             <CardContent className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="company_name">Company Name *</Label>
-                <Input
-                  id="company_name"
-                  value={customerForm.company_name}
-                  onChange={(event) => updateCustomerForm('company_name', event.target.value)}
-                  placeholder="Company name"
-                  disabled={isSubmitting}
-                  className={customerErrors.company_name ? 'border-destructive' : ''}
-                />
+                <div className="relative">
+                  <Input
+                    id="company_name"
+                    value={customerForm.company_name}
+                    onChange={(event) => handleCompanyNameChange(event.target.value)}
+                    placeholder="Company name"
+                    disabled={isSubmitting}
+                    className={customerErrors.company_name ? 'border-destructive' : ''}
+                    onFocus={() => {
+                      if (companySuggestions.length > 0) {
+                        setShowSuggestions(true);
+                      }
+                    }}
+                  />
+                  {showSuggestions && (
+                    <div
+                      ref={dropdownRef}
+                      className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+                    >
+                      {isSearchingCompanies ? (
+                        <div className="py-4 text-center text-sm text-muted-foreground">
+                          <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                          <span className="ml-2">Searching...</span>
+                        </div>
+                      ) : companySuggestions.length > 0 ? (
+                        companySuggestions.map((company, index) => (
+                          <button
+                            key={company.id}
+                            type="button"
+                            className={`block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent ${
+                              index === selectedSuggestionIndex ? 'bg-accent' : ''
+                            }`}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              selectSuggestion(company);
+                            }}
+                          >
+                            <div className="font-medium">{company.company_name}</div>
+<div className="text-xs text-muted-foreground">
+                              {[company.customer_ref, company.city, company.state].filter(Boolean).join(' • ')}
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="py-3 text-center text-sm text-muted-foreground">
+                          No matching customers found
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {customerErrors.company_name && <p className="text-sm text-destructive">{customerErrors.company_name}</p>}
               </div>
               <div className="space-y-2">
@@ -384,77 +582,24 @@ if (result.success) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                Photo & Location
+                Photo
               </CardTitle>
               <CardDescription>
-                Optionally attach a photo and capture the GPS location of this interaction.
+                Optionally attach a photo. Location is captured automatically on submit.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-3">
-                  <Label className="text-xs font-medium text-muted-foreground">Photo</Label>
-                  <ImageUploadField
-                    id="interaction-photo"
-                    previewUrl={photoPreview}
-                    onFileSelected={handlePhotoSelected}
-                    onClear={handleClearPhoto}
-                    disabled={isSubmitting}
-                    accept="image/*"
-                    description="JPEG, PNG, WebP or GIF. Max 10MB."
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-xs font-medium text-muted-foreground">Location</Label>
-                  {location ? (
-                    <div className="rounded-lg border p-4">
-                      <p className="text-sm font-medium">
-                        {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                      </p>
-                      {location.accuracy !== null && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Accuracy ±{Math.round(location.accuracy)}m
-                        </p>
-                      )}
-                      {locationAddress && (
-                        <p className="mt-2 text-xs text-muted-foreground">{locationAddress}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No location captured yet.
-                    </p>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={handleCaptureLocation}
-                    disabled={isSubmitting || capturingLocation}
-                  >
-                    {capturingLocation ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Capturing...
-                      </>
-                    ) : location ? (
-                      <>
-                        <MapPin className="h-4 w-4" />
-                        Recapture Location
-                      </>
-                    ) : (
-                      <>
-                        <MapPin className="h-4 w-4" />
-                        Capture Location
-                      </>
-                    )}
-                  </Button>
-                  {locationError && (
-                    <p className="text-xs text-destructive">{locationError}</p>
-                  )}
-                </div>
+              <div className="space-y-3">
+                <Label className="text-xs font-medium text-muted-foreground">Photo</Label>
+                <ImageUploadField
+                  id="interaction-photo"
+                  previewUrl={photoPreview}
+                  onFileSelected={handlePhotoSelected}
+                  onClear={handleClearPhoto}
+                  disabled={isSubmitting}
+                  accept="image/*"
+                  description="JPEG, PNG, WebP or GIF. Max 10MB."
+                />
               </div>
             </CardContent>
           </Card>
@@ -664,32 +809,27 @@ if (result.success) {
                     </FormItem>
                   )}
                 />
-              </div>
+</div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="interactionChannel"
-                  render={({ field, fieldState }) => (
+                  name="followupDate"
+                  render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1.5">
-                        <Send className="h-4 w-4" />
-                        Interaction Channel <span className="text-destructive">*</span>
+                        <Calendar className="h-4 w-4" />
+                        Follow-up Date (optional)
                       </FormLabel>
                       <FormControl>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger className={cn(fieldState.invalid && 'border-destructive')}>
-                            <SelectValue placeholder="Select channel" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="CALL">Call</SelectItem>
-                            <SelectItem value="VISIT">Visit</SelectItem>
-                            <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                            <SelectItem value="EMAIL">Email</SelectItem>
-                            <SelectItem value="MEETING">Meeting</SelectItem>
-                            <SelectItem value="VIDEO_CALL">Video Call</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Input
+                          type="date"
+                          className={cn(field.fieldState?.invalid && 'border-destructive')}
+                          value={field.value ?? ''}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          onBlur={field.onBlur}
+                          disabled={isSubmitting}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -698,7 +838,32 @@ if (result.success) {
 
                 <FormField
                   control={form.control}
-                  name="interactionDurationMinutes"
+                  name="followupTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Clock className="h-4 w-4" />
+                        Follow-up Time (optional)
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="time"
+                          className={cn(field.fieldState?.invalid && 'border-destructive')}
+                          value={field.value ?? ''}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          onBlur={field.onBlur}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="interactionDurationMinutes"
                   render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1.5">
@@ -795,3 +960,5 @@ if (result.success) {
     </div>
   );
 }
+
+

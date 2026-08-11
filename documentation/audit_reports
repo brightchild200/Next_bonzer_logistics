@@ -85,7 +85,7 @@ Customer Interaction Module Audit
 1. Sidebar Integration ❌ MISSING
 - Missing from nav: The navItems in lib/nav.ts has NO "Customer Interactions" entry
 - Module registry exists at lib/registry/modules/interactions.ts but points to /interactions route (doesn't exist; actual route is /customer-interactions)
-- Sidebar uses PERMISSIONS.ENQUIRY.READ for module permission, but module has its own PERMISSIONS.INTERACTION.READ_ALL
+- Sidebar uses the wrong enquiry permission name for module visibility; it should be aligned with the module's interaction permissions.
 - Result: Module is completely inaccessible via sidebar navigation
 2. Interaction List (customer-interactions-table.tsx) ⚠️ ISSUES
 Issue	Severity	Details
@@ -159,7 +159,7 @@ Delete interaction missing	🔴 Critical	Dropdown has delete but no server actio
 Permission errors generic	🟡 Medium	"Insufficient permissions" - no detail
 11. Permissions ⚠️ MISALIGNED
 Permission	Used Where	Issue
-PERMISSIONS.ENQUIRY.READ	Sidebar nav for module	Should be PERMISSIONS.INTERACTION.READ_ALL
+The old enquiry module permission name in this note should be treated as legacy; current code uses the interaction module permission set.
 PERMISSIONS.CUSTOMER.CREATE	Create interaction	Odd - creating interaction checks customer create perm
 PERMISSIONS.ENQUIRY.CREATE	Create follow-up, convert	Should be FOLLOW_UP / INTERACTION perms
 follow_up:update_own (string)	Complete follow-up	Hardcoded string, not from PERMISSIONS constant

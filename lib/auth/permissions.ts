@@ -43,6 +43,7 @@ export const PERMISSIONS = {
   },
   FOLLOW_UP: {
     READ_ALL: 'follow_up:read_all',
+    READ_OWN: 'follow_up:read_own',
     UPDATE_OWN: 'follow_up:update_own',
   },
   PRICING: {
@@ -60,6 +61,24 @@ export const PERMISSIONS = {
     USER_UPDATE: 'user:update',
     USER_DEACTIVATE: 'user:deactivate',
     USER_ASSIGN_ROLES: 'user:assign_roles',
+  },
+  KYC: {
+    READ: 'kyc:read',
+    UPDATE: 'kyc:update',
+  },
+  ATTENDANCE: {
+    CHECK_IN: 'attendance:check_in',
+    CHECK_OUT: 'attendance:check_out',
+    READ_OWN: 'attendance:read_own',
+    READ_TEAM: 'attendance:read_team',
+    READ_ALL: 'attendance:read_all',
+  },
+  TARGET: {
+    CREATE: 'target:create',
+    UPDATE: 'target:update',
+    READ_OWN: 'target:read_own',
+    READ_TEAM: 'target:read_team',
+    READ_ALL: 'target:read_all',
   },
 } as const;
 
@@ -79,7 +98,10 @@ export type Permission =
   | (typeof PERMISSIONS.FOLLOW_UP)[keyof typeof PERMISSIONS.FOLLOW_UP]
   | (typeof PERMISSIONS.PRICING)[keyof typeof PERMISSIONS.PRICING]
   | (typeof PERMISSIONS.JOB)[keyof typeof PERMISSIONS.JOB]
-  | (typeof PERMISSIONS.ADMIN)[keyof typeof PERMISSIONS.ADMIN];
+  | (typeof PERMISSIONS.ADMIN)[keyof typeof PERMISSIONS.ADMIN]
+  | (typeof PERMISSIONS.KYC)[keyof typeof PERMISSIONS.KYC]
+  | (typeof PERMISSIONS.ATTENDANCE)[keyof typeof PERMISSIONS.ATTENDANCE]
+  | (typeof PERMISSIONS.TARGET)[keyof typeof PERMISSIONS.TARGET];
 
 /**
  * Flat array of all permissions for iteration.
@@ -92,6 +114,9 @@ export const ALL_PERMISSIONS: Permission[] = [
   ...Object.values(PERMISSIONS.PRICING),
   ...Object.values(PERMISSIONS.JOB),
   ...Object.values(PERMISSIONS.ADMIN),
+  ...Object.values(PERMISSIONS.KYC),
+  ...Object.values(PERMISSIONS.ATTENDANCE),
+  ...Object.values(PERMISSIONS.TARGET),
 ];
 
 /**

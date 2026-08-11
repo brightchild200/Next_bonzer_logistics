@@ -59,7 +59,7 @@ export async function updateEnquiryStatus(
     ? authContext.permissions
     : [];
 
-  if (!userPermissions.includes(PERMISSIONS.ENQUIRY.UPDATE)) {
+  if (!userPermissions.includes(PERMISSIONS.ENQUIRY.UPDATE_CS_FIELDS)) {
     return { success: false, error: 'Insufficient permissions' };
   }
 

@@ -41,7 +41,7 @@ Create and verify:
 * [x] Valid login
 * [x] Invalid password
 * [x] Invalid email
-* [ ] Session persists
+* [x] Session persists
 * [x] Logout
 * [x] Password reset
 * [x] Expired reset link
@@ -57,9 +57,9 @@ For every role verify:
 * [x] Page access
 * [ ] API access
 * [ ] Server Actions
-* [ ] Hidden buttons
-* [ ] Disabled actions
-* [ ] Unauthorized URL access
+* [x] Hidden buttons
+* [x] Disabled actions
+* [x] Unauthorized URL access
 
 ---
 
@@ -67,16 +67,16 @@ For every role verify:
 
 ## Create
 
-* [ ] New customer
-* [ ] Required fields
-* [ ] GST validation
-* [ ] PAN validation
-* [ ] Duplicate company
-* [ ] Duplicate GST
-* [ ] Duplicate PAN
-* [ ] Shipper
-* [ ] Consignee
-* [ ] Both shipper & consignee
+* [x] New customer
+* [x] Required fields
+* [x] GST validation
+* [x] PAN validation
+* [x] Duplicate company
+* [x] Duplicate GST
+* [x] Duplicate PAN
+* [x] Shipper
+* [x] Consignee
+* [x] Both shipper & consignee
 
 ---
 
@@ -91,9 +91,9 @@ For every role verify:
 
 ## Search
 
-* [ ] Search by company
-* [ ] Search by GST
-* [ ] Search by customer ref
+* [x] Search by company
+* [X] Search by GST
+* [x] Search by customer ref
 * [ ] Pagination
 * [ ] Sorting
 
@@ -191,11 +191,11 @@ For every role verify:
 
 After every major action verify:
 
-* [ ] Record inserted
-* [ ] Foreign keys correct
-* [ ] Audit columns correct
-* [ ] Soft delete (if applicable)
-* [ ] No duplicate records
+* [x] Record inserted
+* [x] Foreign keys correct
+* [x] Audit columns correct
+* [x] Soft delete (if applicable)
+* [x] No duplicate records
 
 ---
 
@@ -248,9 +248,9 @@ Confirm existing features still work:
 
 # Phase 13 — Security Testing
 
-* [ ] Direct URL access blocked
+* [x] Direct URL access blocked
 * [ ] API authorization
-* [ ] RLS enforcement
+* [x] RLS enforcement
 * [ ] Server Action authorization
 * [ ] Browser dev tools cannot bypass permissions
 * [ ] SQL injection attempts rejected

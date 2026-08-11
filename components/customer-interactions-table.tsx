@@ -422,7 +422,7 @@ export function CustomerInteractionsTable({
                   <TableRow
                     key={interaction.id}
                     className="cursor-pointer hover:bg-muted/40 transition-colors"
-                    onClick={() => window.location.href = `/customer-interactions/${interaction.id}`}
+                    onClick={() => window.location.href = `/customer-interactions/${interaction.interactionRef}`}
                   >
                     <TableCell className="font-mono text-xs font-medium">
                       {interaction.interactionRef}
@@ -475,7 +475,7 @@ export function CustomerInteractionsTable({
                         className="h-8 w-8"
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.location.href = `/customer-interactions/${interaction.id}`;
+                          window.location.href = `/customer-interactions/${interaction.interactionRef}`;
                         }}
                       >
                         <MessageSquare className="h-4 w-4" />

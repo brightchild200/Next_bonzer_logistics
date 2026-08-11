@@ -41,7 +41,7 @@ export async function assignEnquiry(
     ? authContext.permissions
     : [];
 
-  if (!userPermissions.includes(PERMISSIONS.ENQUIRY.ASSIGN)) {
+  if (!userPermissions.includes(PERMISSIONS.ENQUIRY.ASSIGN_CS)) {
     return { success: false, error: 'Insufficient permissions' };
   }
 

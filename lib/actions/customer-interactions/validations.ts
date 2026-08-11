@@ -77,6 +77,8 @@ export const interactionFiltersSchema = z.object({
 
 export const followupFiltersSchema = z.object({
   interactionId: z.string().uuid().optional(),
+  customerId: z.string().uuid().optional(),
+  employeeId: z.string().uuid().optional(),
   status: z.enum(['Pending', 'Completed']).optional(),
   dueFrom: z.string().datetime().optional(),
   dueTo: z.string().datetime().optional(),

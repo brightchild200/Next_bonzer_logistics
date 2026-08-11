@@ -46,7 +46,10 @@ export async function convertInteractionToEnquiry(
     : [];
 
   if (!userPermissions.includes(PERMISSIONS.ENQUIRY.CREATE)) {
-    return { success: false, error: 'Insufficient permissions' };
+    return { success: false, error: 'Insufficient permissions: enquiry:create required' };
+  }
+  if (!userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL)) {
+    return { success: false, error: 'Insufficient permissions: interaction:read_all required' };
   }
 
   if (!interactionId?.trim()) {

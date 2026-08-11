@@ -6,6 +6,7 @@ export * from './list-employees-for-filter';
 export * from './list-customers-for-filter';
 export * from './search-customers';
 export * from './get-interaction';
+export * from './get-interaction-by-ref';
 export * from './get-followups';
 export * from './get-customer';
 export * from './get-employee';

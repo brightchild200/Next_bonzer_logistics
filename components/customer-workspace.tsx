@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Download,
@@ -10,15 +10,22 @@ import {
   Search,
   Users,
   X,
+  Trash2,
+  Eye,
+  Printer,
   AlertCircle,
   CheckCircle,
   Loader2,
+  ChevronDown,
 } from 'lucide-react';
 
 import { toast } from 'sonner';
 
 import { createCustomer } from '@/lib/actions/customers/create-customer';
+import { checkCustomerIdentifierConflict } from '@/lib/actions/customers/check-customer-identifiers';
+import { deleteCustomer } from '@/lib/actions/customers/delete-customer';
 import { updateCustomer } from '@/lib/actions/customers/update-customer';
+import { searchCompanyNames, type CompanyNameResult } from '@/lib/actions/customers/search-company-names';
 import type {
   Customer,
   CustomerInput,
@@ -35,6 +42,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -134,6 +142,7 @@ export function CustomerWorkspace() {
   const [sortBy, setSortBy] = useState<'company_name' | 'customer_ref' | 'city' | 'state' | 'kyc_status' | 'created_at'>('company_name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
   const toggleSort = (field: typeof sortBy) => {
     if (sortBy === field) {
@@ -209,6 +218,9 @@ export function CustomerWorkspace() {
   
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [deletingCustomerId, setDeletingCustomerId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   const [customerForm, setCustomerForm] = useState<CustomerInput>({
@@ -229,6 +241,7 @@ export function CustomerWorkspace() {
 
   const [addAsShipper, setAddAsShipper] = useState(false);
   const [addAsConsignee, setAddAsConsignee] = useState(false);
+  const [checkingIdentifier, setCheckingIdentifier] = useState(false);
 
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof CustomerInput, string>>>({});
 
@@ -292,9 +305,66 @@ export function CustomerWorkspace() {
     setAddAsConsignee(false);
     setFormErrors({});
     setEditingCustomer(null);
+    setCheckingIdentifier(false);
+  }
+
+  async function validateIdentifierConflict(): Promise<boolean> {
+    const gstValue = customerForm.gst_number?.trim();
+    const panValue = customerForm.pan_number?.trim();
+    const currentCustomerId = editingCustomer?.id;
+
+    if (!gstValue && !panValue) return true;
+
+    setCheckingIdentifier(true);
+
+    try {
+      if (gstValue) {
+        const gstResult = await checkCustomerIdentifierConflict(
+          'gst_number',
+          gstValue,
+          currentCustomerId
+        );
+        if (!gstResult.success) {
+          toast.error(gstResult.error, { position: 'top-center' });
+          return false;
+        }
+        if (gstResult.conflict) {
+          toast.error(
+            `This GST no. is invalid because it already belongs to ${gstResult.conflict.company_name} (${gstResult.conflict.customer_ref})`,
+            { position: 'top-center' }
+          );
+          return false;
+        }
+      }
+
+      if (panValue) {
+        const panResult = await checkCustomerIdentifierConflict(
+          'pan_number',
+          panValue,
+          currentCustomerId
+        );
+        if (!panResult.success) {
+          toast.error(panResult.error, { position: 'top-center' });
+          return false;
+        }
+        if (panResult.conflict) {
+          toast.error(
+            `This PAN no. is invalid because it already belongs to ${panResult.conflict.company_name} (${panResult.conflict.customer_ref})`,
+            { position: 'top-center' }
+          );
+          return false;
+        }
+      }
+
+      return true;
+    } finally {
+      setCheckingIdentifier(false);
+    }
   }
 
   function openEditDialog(customer: Customer) {
+    setCreateDialogOpen(false);
+    setDetailsDialogOpen(false);
     setEditingCustomer(customer);
     setCustomerForm({
       company_name: customer.company_name,
@@ -317,8 +387,16 @@ export function CustomerWorkspace() {
     setEditDialogOpen(true);
   }
 
+  function openDetailsDialog(customer: Customer) {
+    setCreateDialogOpen(false);
+    setEditDialogOpen(false);
+    setEditingCustomer(customer);
+    setDetailsDialogOpen(true);
+  }
+
   async function handleCreateCustomer() {
     if (!validateForm()) return;
+    if (!(await validateIdentifierConflict())) return;
 
     setCreating(true);
 
@@ -357,6 +435,7 @@ export function CustomerWorkspace() {
 
   async function handleUpdateCustomer() {
     if (!editingCustomer || !validateForm()) return;
+    if (!(await validateIdentifierConflict())) return;
 
     setUpdating(true);
 
@@ -384,6 +463,31 @@ export function CustomerWorkspace() {
       await loadCustomers(debouncedSearch, page);
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function handleDeleteCustomer() {
+    if (!editingCustomer) return;
+    if (deleteConfirmText.trim() !== editingCustomer.company_name.trim()) {
+      toast.error('Type the exact company name to confirm delete');
+      return;
+    }
+
+    setDeletingCustomerId(editingCustomer.id);
+    try {
+      const result = await deleteCustomer(editingCustomer.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success('Customer deleted successfully');
+      setDeleteConfirmOpen(false);
+      setDetailsDialogOpen(false);
+      resetCustomerForm();
+      await loadCustomers(debouncedSearch, page);
+    } finally {
+      setDeletingCustomerId(null);
     }
   }
 
@@ -419,7 +523,7 @@ export function CustomerWorkspace() {
             </Button>
           </DialogTrigger>
 
-          <DialogContent className="max-h-[90vh] max-w-3xl w-full">
+          <DialogContent className="max-h-[90vh] max-w-3xl w-full overflow-hidden">
             <DialogHeader>
               <DialogTitle>Add Customer</DialogTitle>
               <DialogDescription>
@@ -427,19 +531,21 @@ export function CustomerWorkspace() {
               </DialogDescription>
             </DialogHeader>
 
-            <CustomerForm
-              creating={creating}
-              customerForm={customerForm}
-              formErrors={formErrors}
-              updateCustomerForm={updateCustomerForm}
-              addAsShipper={addAsShipper}
-              setAddAsShipper={setAddAsShipper}
-              addAsConsignee={addAsConsignee}
-              setAddAsConsignee={setAddAsConsignee}
-              onSubmit={handleCreateCustomer}
-              onCancel={() => setCreateDialogOpen(false)}
-              submitLabel="Create Customer"
-            />
+            <div className="max-h-[calc(90vh-9rem)] overflow-y-auto pr-2">
+              <CustomerForm
+                creating={creating || checkingIdentifier}
+                customerForm={customerForm}
+                formErrors={formErrors}
+                updateCustomerForm={updateCustomerForm}
+                addAsShipper={addAsShipper}
+                setAddAsShipper={setAddAsShipper}
+                addAsConsignee={addAsConsignee}
+                setAddAsConsignee={setAddAsConsignee}
+                onSubmit={handleCreateCustomer}
+                onCancel={() => setCreateDialogOpen(false)}
+                submitLabel="Create Customer"
+              />
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -452,7 +558,7 @@ export function CustomerWorkspace() {
             }
           }}
         >
-          <DialogContent className="max-h-[90vh] max-w-3xl w-full">
+          <DialogContent className="max-h-[90vh] max-w-3xl w-full overflow-hidden">
             <DialogHeader>
               <DialogTitle>Edit Customer</DialogTitle>
               <DialogDescription>
@@ -460,22 +566,145 @@ export function CustomerWorkspace() {
               </DialogDescription>
             </DialogHeader>
 
-            <CustomerForm
-              creating={updating}
-              customerForm={customerForm}
-              formErrors={formErrors}
-              updateCustomerForm={updateCustomerForm}
-              addAsShipper={addAsShipper}
-              setAddAsShipper={setAddAsShipper}
-              addAsConsignee={addAsConsignee}
-              setAddAsConsignee={setAddAsConsignee}
-              onSubmit={handleUpdateCustomer}
-              onCancel={() => setEditDialogOpen(false)}
-              submitLabel="Save Changes"
-              showPartyOptions={false}
-            />
+            <div className="max-h-[calc(90vh-9rem)] overflow-y-auto pr-2">
+              <CustomerForm
+                creating={updating || checkingIdentifier}
+                customerForm={customerForm}
+                formErrors={formErrors}
+                updateCustomerForm={updateCustomerForm}
+                addAsShipper={addAsShipper}
+                setAddAsShipper={setAddAsShipper}
+                addAsConsignee={addAsConsignee}
+                setAddAsConsignee={setAddAsConsignee}
+                onSubmit={handleUpdateCustomer}
+                onCancel={() => setEditDialogOpen(false)}
+                submitLabel="Save Changes"
+                showPartyOptions={true}
+              />
+            </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog
+          open={detailsDialogOpen}
+          onOpenChange={(open) => {
+            setDetailsDialogOpen(open);
+            if (!open) {
+              setDeleteConfirmOpen(false);
+              setDeleteConfirmText('');
+            }
+          }}
+        >
+          <DialogContent className="max-h-[90vh] max-w-3xl w-full overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>Customer Details</DialogTitle>
+              <DialogDescription>
+                Read-only view. Use Edit if you want to make changes.
+              </DialogDescription>
+            </DialogHeader>
+
+            {editingCustomer && (
+              <div className="max-h-[calc(90vh-11rem)] overflow-y-auto pr-2">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1 sm:col-span-2">
+                    <p className="text-sm text-muted-foreground">Company Name</p>
+                    <p className="font-medium">{editingCustomer.company_name}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Reference</p>
+                    <p className="font-mono text-sm">{editingCustomer.customer_ref}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Contact Person</p>
+                    <p className="text-sm">{editingCustomer.contact_person || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Email</p>
+                    <p className="text-sm">{editingCustomer.email || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Phone</p>
+                    <p className="text-sm">{editingCustomer.phone || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">City</p>
+                    <p className="text-sm">{editingCustomer.city || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">State</p>
+                    <p className="text-sm">{editingCustomer.state || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Country</p>
+                    <p className="text-sm">{editingCustomer.country || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Pincode</p>
+                    <p className="text-sm">{editingCustomer.pincode || '—'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">KYC Status</p>
+                    <StatusBadge status={editingCustomer.kyc_status} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <p className="text-sm">{editingCustomer.is_active ? 'Active' : 'Inactive'}</p>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <p className="text-sm text-muted-foreground">Address</p>
+                    <p className="text-sm whitespace-pre-wrap">{editingCustomer.address || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDetailsDialogOpen(false)}>
+                Close
+              </Button>
+              <Button type="button" variant="outline" onClick={() => openEditDialog(editingCustomer as Customer)}>
+                Edit
+              </Button>
+              <Button
+                type="button"
+                onClick={() => window.print()}
+                variant="outline"
+              >
+                Print
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete customer</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will deactivate the customer. Type the exact company name to confirm.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2">
+              <Input
+                value={deleteConfirmText}
+                onChange={(event) => setDeleteConfirmText(event.target.value)}
+                placeholder={editingCustomer?.company_name ?? 'Company name'}
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleDeleteCustomer();
+                }}
+                disabled={deletingCustomerId === editingCustomer?.id}
+              >
+                {deletingCustomerId === editingCustomer?.id ? 'Deleting...' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </PageHeader>
 
       <Card className="mb-4 p-4">
@@ -545,7 +774,6 @@ export function CustomerWorkspace() {
                     )}
                   </div>
                 </TableHead>
-                <TableHead className="hidden lg:table-cell">GST / PAN</TableHead>
                 <TableHead className="cursor-pointer select-none" onClick={() => handleSort('kyc_status')}>
                   <div className="flex items-center gap-1">
                     KYC
@@ -577,7 +805,7 @@ export function CustomerWorkspace() {
                 ))
               ) : customers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="h-64">
+                  <TableCell colSpan={10} className="h-64">
                     <div className="flex flex-col items-center justify-center text-center">
                       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
                         <Users className="h-8 w-8 text-muted-foreground" />
@@ -603,8 +831,9 @@ export function CustomerWorkspace() {
                 customers.map((customer) => (
                   <TableRow
                     key={customer.id}
-                    className="hover:bg-muted/40 transition-colors"
-                    onClick={() => openEditDialog(customer)}
+                    className="cursor-default hover:bg-muted/40 transition-colors"
+                    onClick={() => {}}
+                    onDoubleClick={() => openDetailsDialog(customer)}
                   >
                     <TableCell className="font-medium truncate max-w-xs">{customer.company_name}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{customer.customer_ref}</TableCell>
@@ -613,11 +842,7 @@ export function CustomerWorkspace() {
                     <TableCell className="hidden lg:table-cell">{customer.phone || '—'}</TableCell>
                     <TableCell className="hidden md:table-cell">{customer.city || '—'}</TableCell>
                     <TableCell className="hidden lg:table-cell">{customer.state || '—'}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-xs font-mono">
-                      {customer.gst_number && <span className="block">GST: {customer.gst_number}</span>}
-                      {customer.pan_number && <span className="block">PAN: {customer.pan_number}</span>}
-                      {!customer.gst_number && !customer.pan_number && <span className="text-muted-foreground">—</span>}
-                    </TableCell>
+
                     <TableCell><StatusBadge status={customer.kyc_status} /></TableCell>
                     <TableCell>
                       {!customer.is_active && (
@@ -625,18 +850,56 @@ export function CustomerWorkspace() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditDialog(customer);
-                        }}
-                        aria-label="Edit customer"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="View customer"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditDialog(customer);
+                          }}
+                          aria-label="Edit customer"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDetailsDialog(customer);
+                            setTimeout(() => window.print(), 100);
+                          }}
+                          aria-label="Print customer"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDetailsDialog(customer);
+                            setDeleteConfirmText('');
+                            setDeleteConfirmOpen(true);
+                          }}
+                          aria-label="Delete customer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -704,24 +967,204 @@ function CustomerForm({
   submitLabel,
   showPartyOptions = true,
 }: CustomerFormProps) {
+  const [companySuggestions, setCompanySuggestions] = useState<CompanyNameResult[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const [hasSelectedCompany, setHasSelectedCompany] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const searchCompanies = useCallback(async (searchText: string) => {
+    const trimmed = searchText.trim();
+    if (trimmed.length < 2) {
+      setCompanySuggestions([]);
+      setShowSuggestions(false);
+      setSelectedSuggestionIndex(-1);
+      setHasSelectedCompany(false);
+      return;
+    }
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(async () => {
+      setIsSearchingCompanies(true);
+      const result = await searchCompanyNames(trimmed, 10);
+      setIsSearchingCompanies(false);
+
+      if (result.success) {
+        setCompanySuggestions(result.companies);
+        setShowSuggestions(result.companies.length > 0);
+        setSelectedSuggestionIndex(-1);
+      } else {
+        setCompanySuggestions([]);
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+      }
+    }, 300);
+  }, []);
+
+  const handleCompanyNameChange = (value: string) => {
+    setHasSelectedCompany(false);
+    updateCustomerForm('company_name', value);
+    searchCompanies(value);
+  };
+
+  const selectSuggestion = (company: CompanyNameResult) => {
+    updateCustomerForm('company_name', company.company_name);
+    updateCustomerForm('contact_person', company.contact_person ?? '');
+    updateCustomerForm('email', company.email ?? '');
+    updateCustomerForm('phone', company.phone ?? '');
+    updateCustomerForm('city', company.city ?? '');
+    updateCustomerForm('state', company.state ?? '');
+    updateCustomerForm('gst_number', company.gst_number ?? '');
+    updateCustomerForm('pan_number', company.pan_number ?? '');
+    setCompanySuggestions([]);
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+    setHasSelectedCompany(true);
+    inputRef.current?.blur();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions || companySuggestions.length === 0) return;
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        setSelectedSuggestionIndex((prev) =>
+          prev < companySuggestions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        setSelectedSuggestionIndex((prev) =>
+          prev > 0 ? prev - 1 : companySuggestions.length - 1
+        );
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (selectedSuggestionIndex >= 0) {
+          selectSuggestion(companySuggestions[selectedSuggestionIndex]);
+        }
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+        inputRef.current?.blur();
+        break;
+    }
+  };
+
+  const handleFocus = () => {
+    if (
+      !hasSelectedCompany &&
+      companySuggestions.length > 0 &&
+      customerForm.company_name.trim().length >= 2
+    ) {
+      setShowSuggestions(true);
+    }
+  };
+
+  const handleBlur = () => {
+    setTimeout(() => {
+      setShowSuggestions(false);
+      setSelectedSuggestionIndex(-1);
+    }, 200);
+  };
+
   return (
     <div className="grid gap-4 py-4 sm:grid-cols-2">
-      <div className="space-y-2 sm:col-span-2">
+      <div className="space-y-2 sm:col-span-2 relative">
         <Label htmlFor="company_name">Company Name *</Label>
-        <Input
-          id="company_name"
-          value={customerForm.company_name}
-          onChange={(event) => updateCustomerForm('company_name', event.target.value)}
-          placeholder="Company name"
-          disabled={creating}
-          aria-invalid={!!formErrors.company_name}
-          className={formErrors.company_name ? 'border-destructive' : ''}
-        />
+        <div className="relative">
+          <Input
+            ref={inputRef}
+            id="company_name"
+            value={customerForm.company_name}
+            onChange={(event) => handleCompanyNameChange(event.target.value)}
+            placeholder="Company name"
+            disabled={creating}
+            aria-invalid={!!formErrors.company_name}
+            aria-autocomplete="list"
+            aria-controls="company-suggestions"
+            aria-expanded={showSuggestions && companySuggestions.length > 0}
+            className={formErrors.company_name ? 'border-destructive' : ''}
+            onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+          />
+          {isSearchingCompanies && (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
+          {!isSearchingCompanies && (
+            <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          )}
+        </div>
         {formErrors.company_name && (
           <p className="text-sm text-destructive flex items-center gap-1">
             <AlertCircle className="h-3 w-3" />
             {formErrors.company_name}
           </p>
+        )}
+
+        {showSuggestions && (
+          <div
+            ref={dropdownRef}
+            id="company-suggestions"
+            className="absolute z-50 w-full mt-1 max-h-60 overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
+            role="listbox"
+            aria-label="Company name suggestions"
+          >
+            {isSearchingCompanies ? (
+              <div className="py-4 text-center text-sm text-muted-foreground">
+                <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+                <span className="ml-2">Searching...</span>
+              </div>
+            ) : companySuggestions.length > 0 ? (
+              companySuggestions.map((company, index) => (
+                <div
+                  key={company.id}
+                  role="option"
+                  aria-selected={index === selectedSuggestionIndex}
+                  className={`cursor-pointer px-3 py-2 hover:bg-accent transition-colors ${
+                    index === selectedSuggestionIndex ? 'bg-accent' : ''
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectSuggestion(company);
+                  }}
+                >
+                  <div className="font-medium">{company.company_name}</div>
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mt-0.5">
+                    {company.customer_ref && <span className="font-mono">{company.customer_ref}</span>}
+                    {company.city && <span>{company.city}</span>}
+                    {company.state && <span>{company.state}</span>}
+                    {company.gst_number && <span className="font-mono">GST: {company.gst_number}</span>}
+                    {company.pan_number && <span className="font-mono">PAN: {company.pan_number}</span>}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-3 text-center text-sm text-muted-foreground">
+                No matching customers found
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -943,3 +1386,4 @@ function CustomerForm({
     </div>
   );
 }
+

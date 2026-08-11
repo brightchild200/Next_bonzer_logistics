@@ -22,6 +22,17 @@ type FollowupRow = {
   created_at: string;
   updated_at: string;
   is_active: boolean;
+  customer_interactions: {
+    id: string;
+    interaction_ref: string;
+    customer_id: string;
+    employee_id: string;
+    subject: string | null;
+    customer: Array<{
+      customer_ref: string;
+      company_name: string;
+    }> | null;
+  } | null;
 };
 
 export interface ListFollowupsResult {
@@ -65,7 +76,10 @@ export async function listFollowups(
     ? authContext.permissions
     : [];
 
-  if (!userPermissions.includes('follow_up:read_all')) {
+  const hasReadAll = userPermissions.includes(PERMISSIONS.FOLLOW_UP.READ_ALL);
+  const hasReadOwn = userPermissions.includes(PERMISSIONS.FOLLOW_UP.READ_OWN);
+
+  if (!hasReadAll && !hasReadOwn) {
     return { success: false, error: 'Insufficient permissions' };
   }
 
@@ -88,12 +102,38 @@ export async function listFollowups(
       updated_by,
       created_at,
       updated_at,
-      is_active
+      is_active,
+      customer_interactions!interaction_id (
+        id,
+        interaction_ref,
+        customer_id,
+        employee_id,
+        subject,
+        customer:customers!customer_id (
+          customer_ref,
+          company_name
+        )
+      )
       `,
       { count: 'exact' }
     )
     .order('due_at', { ascending: true })
     .range(offset, offset + limit - 1);
+
+  if (!hasReadAll && hasReadOwn) {
+    const { data: ownInteractions } = await supabase
+      .from('customer_interactions')
+      .select('id')
+      .eq('employee_id', user.id);
+    
+    const interactionIds = ownInteractions?.map(i => i.id) ?? [];
+    if (interactionIds.length > 0) {
+      query = query.in('interaction_id', interactionIds);
+    } else {
+      // User has no interactions, return empty
+      return { success: true, followups: [], total: 0, limit, offset };
+    }
+  }
 
   if (filters.interactionId) {
     query = query.eq('interaction_id', filters.interactionId);
@@ -112,6 +152,9 @@ export async function listFollowups(
   }
 
   if (filters.createdBy) {
+    if (!hasReadAll) {
+      return { success: false, error: 'Insufficient permissions to filter by creator' };
+    }
     query = query.eq('created_by', filters.createdBy);
   }
 
@@ -129,11 +172,19 @@ export async function listFollowups(
   return {
     success: true,
     followups: (data ?? []).map((followup) => {
-      const row = followup as FollowupRow;
+      const row = followup as unknown as FollowupRow;
+      const interaction = row.customer_interactions;
+      const customer = interaction?.customer?.[0] ?? null;
       return {
         id: row.id,
         followupRef: row.followup_ref,
         interactionId: row.interaction_id,
+        interactionRef: interaction?.interaction_ref ?? '',
+        customerId: interaction?.customer_id ?? '',
+        customerRef: customer?.customer_ref ?? '',
+        companyName: customer?.company_name ?? '',
+        employeeId: interaction?.employee_id ?? '',
+        subject: interaction?.subject ?? null,
         dueAt: row.due_at,
         status: row.status,
         completionNotes: row.completion_notes,

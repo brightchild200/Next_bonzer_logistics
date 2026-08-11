@@ -27,7 +27,7 @@ interface PermissionGateProps {
  * </PermissionGate>
  *
  * @example
- * <PermissionGate permissions={[PERMISSIONS.ENQUIRY.READ, PERMISSIONS.ENQUIRY.CREATE]} require="all">
+ * <PermissionGate permissions={[PERMISSIONS.ENQUIRY.READ_TEAM, PERMISSIONS.ENQUIRY.CREATE]} require="all">
  *   <EnquiryPanel />
  * </PermissionGate>
  */

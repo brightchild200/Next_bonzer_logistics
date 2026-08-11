@@ -9,6 +9,8 @@ import {
   BarChart3,
   Settings,
   MessageSquare,
+  Flag,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -41,7 +43,7 @@ export const navItems: NavItem[] = [
     icon: FileText,
     badge: 'New',
     permissions: [
-      PERMISSIONS.ENQUIRY.READ,
+      PERMISSIONS.ENQUIRY.READ_TEAM,
       PERMISSIONS.ENQUIRY.READ_OWN,
     ],
   },
@@ -53,6 +55,26 @@ export const navItems: NavItem[] = [
     permissions: [
       PERMISSIONS.INTERACTION.READ_ALL,
       PERMISSIONS.INTERACTION.READ_OWN,
+    ],
+  },
+
+  {
+    label: 'Follow-ups',
+    href: '/follow-ups',
+    icon: Flag,
+    permissions: [
+      PERMISSIONS.FOLLOW_UP.READ_ALL,
+      PERMISSIONS.FOLLOW_UP.READ_OWN,
+    ],
+  },
+
+  {
+    label: 'KYC',
+    href: '/kyc',
+    icon: ShieldCheck,
+    permissions: [
+      PERMISSIONS.KYC.READ,
+      PERMISSIONS.KYC.UPDATE,
     ],
   },
 

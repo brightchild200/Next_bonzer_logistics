@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/db/client';
 import { Eye, EyeOff, Lock, Loader2, Check, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,14 +12,14 @@ import { toast } from 'sonner';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = createClient();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sessionEstablished, setSessionEstablished] = useState(false);
+  const [recoveryEstablished, setRecoveryEstablished] = useState(false);
+  const [checkingLink, setCheckingLink] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const passwordChecks = [
@@ -28,54 +28,67 @@ export default function ResetPasswordPage() {
     { label: 'Passwords match', ok: password === confirmPassword && password.length > 0 },
   ];
 
-  const establishSessionFromHash = useCallback(async (hash: string) => {
-    setLoading(true);
+  // Ref to avoid stale closures inside the effect's timeout handler.
+  const recoveryEstablishedRef = useRef(recoveryEstablished);
 
-    try {
-      const params = new URLSearchParams(hash.slice(1));
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      const tokenType = params.get('token_type');
-      const type = params.get('type');
-
-      if (!accessToken || !refreshToken || tokenType !== 'bearer' || (type !== 'recovery' && type !== 'invite')) {
-        throw new Error('Invalid reset token format');
-      }
-
-      const { data, error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data.session?.user) {
-        throw new Error('Failed to establish session');
-      }
-
-      setSessionEstablished(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Invalid or expired reset link';
-      setError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
+  // Let Supabase handle exchanging the recovery tokens from the URL.
+  // We listen for auth state changes that fire automatically when the
+  // recovery link is detected (detectSessionInUrl handles this).
   useEffect(() => {
-    if (sessionEstablished) return;
+    let active = true;
 
-    const hash = window.location.hash;
-    if (!hash) {
-      setError('Invalid reset link. Missing authentication tokens.');
-      return;
-    }
+    // Check if there's already an established session (e.g. an invite/recovery session).
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (data.session) {
+        // If a recovery session is already present, we can proceed.
+        recoveryEstablishedRef.current = true;
+        setRecoveryEstablished(true);
+      }
+    });
 
-    void establishSessionFromHash(hash);
-  }, [sessionEstablished, establishSessionFromHash]);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+
+      if (session) {
+        // A session (recovery or otherwise) is established.
+        recoveryEstablishedRef.current = true;
+        setRecoveryEstablished(true);
+        setCheckingLink(false);
+      } else {
+        // No session after the auth flow resolved -> link is invalid/expired.
+        setError('This password reset link is invalid or has expired. Please request a new one.');
+        toast.error('Invalid or expired reset link');
+        setCheckingLink(false);
+      }
+    });
+
+    // Give the client a moment to process tokens in the URL hash/PKCE code.
+    // If after this we still have no recovery session and no session, the link is bad.
+    const timeout = setTimeout(() => {
+      if (!active) return;
+      supabase.auth.getSession().then(({ data }) => {
+        if (!active) return;
+        if (!data.session && !recoveryEstablishedRef.current) {
+          setError('This password reset link is invalid or has expired. Please request a new one.');
+          setCheckingLink(false);
+        } else if (data.session) {
+          recoveryEstablishedRef.current = true;
+          setRecoveryEstablished(true);
+          setCheckingLink(false);
+        }
+      });
+    }, 3000);
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +144,7 @@ export default function ResetPasswordPage() {
     );
   }
 
-  if (!sessionEstablished) {
+  if (!recoveryEstablished) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <Card className="w-full max-w-md">
@@ -251,3 +264,4 @@ export default function ResetPasswordPage() {
     </div>
   );
 }
+

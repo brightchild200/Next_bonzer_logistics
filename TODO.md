@@ -28,7 +28,7 @@
 
 ## Verification
 - [x] TypeScript typecheck passes for all modified files (create-attachment, create-location, create-interaction-form, data-display, list-interaction-types/outcomes, list-employees-for-filter)
-  - Note: pre-existing TS errors exist in `lib/actions/enquiries/*`, `lib/auth/permission-utils.ts`, `lib/nav.ts`, `lib/registry/*` referencing non-existent `PERMISSIONS.ENQUIRY.READ/UPDATE/ASSIGN/CONVERT` — these are unrelated to this module and were present before these changes.
+  - Note: pre-existing TS errors existed in `lib/actions/enquiries/*`, `lib/auth/permission-utils.ts`, `lib/nav.ts`, and `lib/registry/*` before the permission model was aligned to `PERMISSIONS.ENQUIRY.READ_TEAM/READ_OWN/UPDATE_CS_FIELDS/UPDATE_SALES_FIELDS/ASSIGN_CS/CONVERT_JOB`.
 - [ ] Confirm dropdowns populate for Salesperson role (requires migration 014 + permissions assignment)
 - [ ] Smoke test photo upload + preview
 - [ ] Smoke test location capture + reverse-geocode

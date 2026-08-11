@@ -9,7 +9,7 @@ export const interactions: ModuleConfig = {
   route: '/interactions',
   icon: MessageSquare,
   category: ModuleCategory.INTERACTIONS,
-  permission: PERMISSIONS.ENQUIRY.READ,
+  permission: PERMISSIONS.ENQUIRY.READ_TEAM,
   order: 1,
   enabled: true,
 };
