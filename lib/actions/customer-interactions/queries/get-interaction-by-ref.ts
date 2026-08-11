@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/db/server';
+import { createAdminClient } from '@/lib/db/admin';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 import type { CustomerInteraction, InteractionChannel } from '../types';
@@ -9,10 +10,6 @@ type CustomerInteractionRow = {
   id: string;
   interaction_ref: string;
   customer_id: string;
-  customer: Array<{
-    customer_ref: string;
-    company_name: string;
-  }>;
   enquiry_id: string | null;
   employee_id: string;
   interaction_type_id: string;
@@ -31,6 +28,18 @@ type CustomerInteractionRow = {
   contact_person_designation: string | null;
   interaction_channel: string;
   interaction_duration_minutes: number | null;
+};
+
+type CustomerDisplayRow = {
+  id: string;
+  customer_ref: string;
+  company_name: string;
+};
+
+type EmployeeDisplayRow = {
+  id: string;
+  full_name: string;
+  employee_code: string | null;
 };
 
 export interface GetInteractionByRefResult {
@@ -72,9 +81,10 @@ export async function getInteractionByRef(
     : [];
 
   const hasReadAll = userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL);
+  const hasReadTeam = userPermissions.includes(PERMISSIONS.INTERACTION.READ_TEAM);
   const hasReadOwn = userPermissions.includes(PERMISSIONS.INTERACTION.READ_OWN);
 
-  if (!hasReadAll && !hasReadOwn) {
+  if (!hasReadAll && !hasReadTeam && !hasReadOwn) {
     return { success: false, error: 'Insufficient permissions' };
   }
 
@@ -85,10 +95,6 @@ export async function getInteractionByRef(
       id,
       interaction_ref,
       customer_id,
-      customer:customers!customer_id (
-        customer_ref,
-        company_name
-      ),
       enquiry_id,
       employee_id,
       interaction_type_id,
@@ -111,7 +117,8 @@ export async function getInteractionByRef(
     )
     .eq('interaction_ref', interactionRef);
 
-  if (!hasReadAll && hasReadOwn) {
+  // For read_own, add employee_id filter; read_team and read_all rely on RLS
+  if (!hasReadAll && !hasReadTeam && hasReadOwn) {
     query = query.eq('employee_id', user.id);
   }
 
@@ -122,7 +129,20 @@ export async function getInteractionByRef(
   }
 
   const row = data as CustomerInteractionRow;
-  const customer = row.customer?.[0] ?? null;
+
+  const adminClient = createAdminClient();
+
+  const { data: customerData } = await adminClient
+    .from('customers')
+    .select('id, customer_ref, company_name')
+    .eq('id', row.customer_id)
+    .single();
+
+  const { data: employeeData } = await adminClient
+    .from('profiles')
+    .select('id, full_name, employee_code')
+    .eq('id', row.employee_id)
+    .single();
 
   return {
     success: true,
@@ -130,10 +150,12 @@ export async function getInteractionByRef(
       id: row.id,
       interactionRef: row.interaction_ref,
       customerId: row.customer_id,
-      customerRef: customer?.customer_ref ?? '',
-      companyName: customer?.company_name ?? '',
+      customerRef: customerData?.customer_ref ?? '',
+      companyName: customerData?.company_name ?? '',
       enquiryId: row.enquiry_id,
       employeeId: row.employee_id,
+      employeeName: employeeData?.full_name ?? null,
+      employeeCode: employeeData?.employee_code ?? null,
       interactionTypeId: row.interaction_type_id,
       interactionOutcomeId: row.interaction_outcome_id,
       subject: row.subject,

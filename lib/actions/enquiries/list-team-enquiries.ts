@@ -4,6 +4,7 @@ import { createClient } from '@/lib/db/server';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 import type { EnquiryWorkflowRecord, EnquiryStatus } from './types';
+import { startTimer, logPerfEnd, logPerf, endTimer } from '@/lib/perf/timing';
 
 export interface ListTeamEnquiriesFilters {
   status?: EnquiryStatus | EnquiryStatus[];
@@ -30,24 +31,36 @@ export interface ListTeamEnquiriesError {
 export type ListTeamEnquiriesResponse = ListTeamEnquiriesResult | ListTeamEnquiriesError;
 
 export async function listTeamEnquiries(
-  filters: ListTeamEnquiriesFilters = {}
+  filters: ListTeamEnquiriesFilters = {},
+  traceId?: string
 ): Promise<ListTeamEnquiriesResponse> {
-  const supabase = createClient();
+  const totalStart = startTimer();
+  const tid = traceId;
 
+  const clientCreateStart = startTimer();
+  const supabase = createClient();
+  logPerf(tid!, 'createClient', endTimer(clientCreateStart));
+
+  const authStart = startTimer();
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
+  logPerfEnd(tid!, 'auth.getUser', authStart);
 
   if (authError || !user) {
+    logPerfEnd(tid!, 'listTeamEnquiries total (unauthorized)', totalStart);
     return { success: false, error: 'Unauthorized' };
   }
 
+  const authContextStart = startTimer();
   const { data: authContext, error: authContextError } = await supabase.rpc(
     'get_my_auth_context'
   );
+  logPerfEnd(tid!, 'get_my_auth_context RPC', authContextStart);
 
   if (authContextError || !authContext) {
+    logPerfEnd(tid!, 'listTeamEnquiries total (auth context error)', totalStart);
     return { success: false, error: 'Failed to resolve auth context' };
   }
 
@@ -56,6 +69,7 @@ export async function listTeamEnquiries(
     : [];
 
   if (!userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM)) {
+    logPerfEnd(tid!, 'listTeamEnquiries total (insufficient permissions)', totalStart);
     return { success: false, error: 'Insufficient permissions' };
   }
 
@@ -70,6 +84,7 @@ export async function listTeamEnquiries(
       ? [filters.status]
       : undefined;
 
+  const queryStart = startTimer();
   let query = supabase
     .from('enquiries')
     .select(
@@ -116,10 +131,14 @@ export async function listTeamEnquiries(
   }
 
   const { data, error, count } = await query;
+  logPerfEnd(tid!, 'enquiry query', queryStart);
 
   if (error) {
+    logPerfEnd(tid!, 'listTeamEnquiries total (query error)', totalStart);
     return { success: false, error: 'Failed to fetch team enquiries' };
   }
+
+  logPerfEnd(tid!, 'listTeamEnquiries total', totalStart);
 
   return {
     success: true,

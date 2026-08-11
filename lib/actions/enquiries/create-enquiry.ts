@@ -59,6 +59,8 @@ export async function createEnquiry(
     expected_shipment_date,
     notes,
     status,
+    shipper_id,
+    consignee_id,
   } = input;
 
   if (!reference?.trim()) {
@@ -71,6 +73,36 @@ export async function createEnquiry(
 
   if (!origin?.trim() || !destination?.trim()) {
     return { success: false, error: 'Origin and destination are required' };
+  }
+
+  if (shipper_id !== undefined && shipper_id !== null && shipper_id.trim() !== '') {
+    const { data: shipper, error: shipperError } = await supabase
+      .from('shippers')
+      .select('id')
+      .eq('id', shipper_id)
+      .maybeSingle();
+
+    if (shipperError) {
+      return { success: false, error: 'Failed to validate shipper' };
+    }
+    if (!shipper) {
+      return { success: false, error: 'Shipper not found' };
+    }
+  }
+
+  if (consignee_id !== undefined && consignee_id !== null && consignee_id.trim() !== '') {
+    const { data: consignee, error: consigneeError } = await supabase
+      .from('consignees')
+      .select('id')
+      .eq('id', consignee_id)
+      .maybeSingle();
+
+    if (consigneeError) {
+      return { success: false, error: 'Failed to validate consignee' };
+    }
+    if (!consignee) {
+      return { success: false, error: 'Consignee not found' };
+    }
   }
 
   const payload = {
@@ -88,6 +120,8 @@ export async function createEnquiry(
     expected_shipment_date: expected_shipment_date || null,
     notes: notes?.trim() || null,
     status: status ?? 'new',
+    shipper_id: shipper_id?.trim() || null,
+    consignee_id: consignee_id?.trim() || null,
   };
 
   const { data, error } = await supabase
@@ -118,6 +152,8 @@ export async function createEnquiry(
       lost_at,
       archived_at,
       closed_by,
+      shipper_id,
+      consignee_id,
       created_at,
       updated_at
       `

@@ -65,19 +65,11 @@ import { updateInteraction } from '@/lib/actions/customer-interactions/mutations
 import { toast } from 'sonner';
 import type { CustomerInteraction, InteractionFollowup, InteractionType, InteractionOutcome } from '@/lib/actions/customer-interactions/types';
 
-interface EmployeeDetail {
-  id: string;
-  full_name: string;
-  employee_code: string | null;
-  email: string | null;
-}
-
 interface InteractionDetailProps {
   interaction: CustomerInteraction;
   interactionTypes: InteractionType[];
   interactionOutcomes: InteractionOutcome[];
   followups: InteractionFollowup[];
-  employee: EmployeeDetail | null;
 }
 
 const statusConfig = {
@@ -137,7 +129,6 @@ export function InteractionDetail({
   interactionTypes,
   interactionOutcomes,
   followups,
-  employee,
 }: InteractionDetailProps) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
@@ -452,9 +443,9 @@ const [editData, setEditData] = useState({
                   <Label className="text-xs text-muted-foreground">Employee</Label>
                   <p className="flex items-center gap-2">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    {employee?.full_name || interaction.employeeId}
-                    {employee?.employee_code && (
-                      <span className="text-xs text-muted-foreground">({employee.employee_code})</span>
+                    {interaction.employeeName ?? 'Unknown Employee'}
+                    {interaction.employeeCode && (
+                      <span className="text-xs text-muted-foreground">({interaction.employeeCode})</span>
                     )}
                   </p>
                 </div>
@@ -525,7 +516,7 @@ const [editData, setEditData] = useState({
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Customer</Label>
-                  <p className="font-mono">{interaction.customerId}</p>
+                  <p className="font-mono">{interaction.companyName || interaction.customerRef || interaction.customerId}</p>
                 </div>
               </div>
             </CardContent>

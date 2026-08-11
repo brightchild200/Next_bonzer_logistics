@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/db/server';
+import { createAdminClient } from '@/lib/db/admin';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 import type { CustomerInteraction, InteractionChannel, InteractionFilters } from '../types';
@@ -9,10 +10,6 @@ type CustomerInteractionRow = {
   id: string;
   interaction_ref: string;
   customer_id: string;
-  customer: Array<{
-    customer_ref: string;
-    company_name: string;
-  }>;
   enquiry_id: string | null;
   employee_id: string;
   interaction_type_id: string;
@@ -33,6 +30,18 @@ type CustomerInteractionRow = {
   interaction_duration_minutes: number | null;
 };
 
+type CustomerDisplayRow = {
+  id: string;
+  customer_ref: string;
+  company_name: string;
+};
+
+type EmployeeDisplayRow = {
+  id: string;
+  full_name: string;
+  employee_code: string | null;
+};
+
 export interface ListInteractionsResult {
   success: true;
   interactions: CustomerInteraction[];
@@ -47,6 +56,25 @@ export interface ListInteractionsError {
 }
 
 export type ListInteractionsResponse = ListInteractionsResult | ListInteractionsError;
+
+async function getSalespersonTeamMemberIds(supabase: ReturnType<typeof createClient>, currentUserId: string): Promise<string[]> {
+  const { data: roleData } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('name', 'salesperson')
+    .single();
+
+  if (!roleData) {
+    return [];
+  }
+
+  const { data: teamMembers } = await supabase
+    .from('user_roles')
+    .select('user_id')
+    .eq('role_id', roleData.id);
+
+  return (teamMembers ?? []).map(m => m.user_id).filter(id => id !== currentUserId);
+}
 
 export async function listInteractions(
   filters: InteractionFilters = {}
@@ -75,9 +103,10 @@ export async function listInteractions(
     : [];
 
   const hasReadAll = userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL);
+  const hasReadTeam = userPermissions.includes(PERMISSIONS.INTERACTION.READ_TEAM);
   const hasReadOwn = userPermissions.includes(PERMISSIONS.INTERACTION.READ_OWN);
 
-  if (!hasReadAll && !hasReadOwn) {
+  if (!hasReadAll && !hasReadTeam && !hasReadOwn) {
     return { success: false, error: 'Insufficient permissions' };
   }
 
@@ -91,10 +120,6 @@ export async function listInteractions(
       id,
       interaction_ref,
       customer_id,
-      customer:customers!customer_id (
-        customer_ref,
-        company_name
-      ),
       enquiry_id,
       employee_id,
       interaction_type_id,
@@ -119,8 +144,30 @@ export async function listInteractions(
     .order('interaction_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (!hasReadAll && hasReadOwn) {
-    query = query.eq('employee_id', user.id);
+  // Apply scope-based employee filtering (UNION of all granted scopes)
+  if (!hasReadAll) {
+    const allowedEmployeeIds = new Set<string>();
+
+    if (hasReadTeam) {
+      const teamMemberIds = await getSalespersonTeamMemberIds(supabase, user.id);
+      teamMemberIds.forEach((id) => allowedEmployeeIds.add(id));
+    }
+
+    if (hasReadOwn) {
+      allowedEmployeeIds.add(user.id);
+    }
+
+    if (allowedEmployeeIds.size === 0) {
+      return {
+        success: true,
+        interactions: [],
+        total: 0,
+        limit,
+        offset,
+      };
+    }
+
+    query = query.in('employee_id', Array.from(allowedEmployeeIds));
   }
 
   if (filters.customerId) {
@@ -129,7 +176,20 @@ export async function listInteractions(
 
   if (filters.employeeId) {
     if (!hasReadAll) {
-      return { success: false, error: 'Insufficient permissions to filter by employee' };
+      const allowedEmployeeIds = new Set<string>();
+
+      if (hasReadTeam) {
+        const teamMemberIds = await getSalespersonTeamMemberIds(supabase, user.id);
+        teamMemberIds.forEach((id) => allowedEmployeeIds.add(id));
+      }
+
+      if (hasReadOwn) {
+        allowedEmployeeIds.add(user.id);
+      }
+
+      if (!allowedEmployeeIds.has(filters.employeeId)) {
+        return { success: false, error: 'Insufficient permissions to filter by that employee' };
+      }
     }
     query = query.eq('employee_id', filters.employeeId);
   }
@@ -175,19 +235,66 @@ export async function listInteractions(
     return { success: false, error: 'Failed to fetch interactions' };
   }
 
+  const interactionsData = data ?? [];
+
+  const customerIds = Array.from(new Set(interactionsData.map((row) => row.customer_id)));
+  const employeeIds = Array.from(new Set(interactionsData.map((row) => row.employee_id)));
+
+  let customerDisplayMap = new Map<string, { customerRef: string; companyName: string }>();
+  let employeeDisplayMap = new Map<string, { employeeName: string; employeeCode: string | null }>();
+
+  if (customerIds.length > 0 || employeeIds.length > 0) {
+    const adminClient = createAdminClient();
+
+    if (customerIds.length > 0) {
+      const { data: customersData } = await adminClient
+        .from('customers')
+        .select('id, customer_ref, company_name')
+        .in('id', customerIds);
+
+      if (customersData) {
+        customerDisplayMap = new Map(
+          (customersData as CustomerDisplayRow[]).map((row) => [
+            row.id,
+            { customerRef: row.customer_ref, companyName: row.company_name },
+          ])
+        );
+      }
+    }
+
+    if (employeeIds.length > 0) {
+      const { data: employeesData } = await adminClient
+        .from('profiles')
+        .select('id, full_name, employee_code')
+        .in('id', employeeIds);
+
+      if (employeesData) {
+        employeeDisplayMap = new Map(
+          (employeesData as EmployeeDisplayRow[]).map((row) => [
+            row.id,
+            { employeeName: row.full_name, employeeCode: row.employee_code },
+          ])
+        );
+      }
+    }
+  }
+
   return {
     success: true,
-    interactions: (data ?? []).map((interaction) => {
+    interactions: interactionsData.map((interaction) => {
       const row = interaction as CustomerInteractionRow;
-      const customer = row.customer?.[0] ?? null;
+      const customerDisplay = customerDisplayMap.get(row.customer_id);
+      const employeeDisplay = employeeDisplayMap.get(row.employee_id);
       return {
         id: row.id,
         interactionRef: row.interaction_ref,
         customerId: row.customer_id,
-        customerRef: customer?.customer_ref ?? '',
-        companyName: customer?.company_name ?? '',
+        customerRef: customerDisplay?.customerRef ?? '',
+        companyName: customerDisplay?.companyName ?? '',
         enquiryId: row.enquiry_id,
         employeeId: row.employee_id,
+        employeeName: employeeDisplay?.employeeName ?? null,
+        employeeCode: employeeDisplay?.employeeCode ?? null,
         interactionTypeId: row.interaction_type_id,
         interactionOutcomeId: row.interaction_outcome_id,
         subject: row.subject,

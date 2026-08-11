@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { ExportActions } from '@/components/export-actions';
 import { buildWorkbook, downloadWorkbook, formatDateForFile, openPrintWindow } from '@/lib/export-utils';
 import { listInteractions } from '@/lib/actions/customer-interactions/queries/list-interactions';
+import { toast } from 'sonner';
 import type { CustomerInteraction } from '@/lib/actions/customer-interactions/types';
 import type { InteractionType, InteractionOutcome } from '@/lib/actions/customer-interactions/types';
 
@@ -87,10 +88,11 @@ function buildInteractionsTableHtml(rows: CustomerInteraction[]) {
       (row) => `
         <tr>
           <td>${row.interactionRef}</td>
-          <td>${row.companyName || row.customerRef || row.customerId}</td>
+          <td>${row.companyName || row.customerRef || 'Unknown Customer'}</td>
           <td>${new Date(row.interactionAt).toLocaleDateString()}</td>
           <td>${row.subject ?? ''}</td>
           <td>${row.interactionChannel}</td>
+          <td>${row.employeeName ?? 'Unknown Employee'}</td>
           <td>${row.isActive ? 'Active' : 'Inactive'}</td>
         </tr>`
     )
@@ -105,6 +107,7 @@ function buildInteractionsTableHtml(rows: CustomerInteraction[]) {
           <th>Date</th>
           <th>Subject</th>
           <th>Channel</th>
+          <th>Employee</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -244,17 +247,22 @@ export function CustomerInteractionsTable({
               limit: 1000,
               offset: 0,
             });
-            if (!result.success) return;
+            if (!result.success) {
+              toast.error(result.error);
+              return;
+            }
             const rows = result.interactions.map((row) => ({
               Reference: row.interactionRef,
-              Customer: row.companyName || row.customerRef || row.customerId,
+              Customer: row.companyName || row.customerRef || 'Unknown Customer',
               Date: row.interactionAt,
               Subject: row.subject ?? '',
               Channel: row.interactionChannel,
+              Employee: row.employeeName ?? 'Unknown Employee',
               Status: row.isActive ? 'Active' : 'Inactive',
             }));
             const workbook = buildWorkbook(rows, 'Interactions');
             downloadWorkbook(workbook, `interactions_${formatDateForFile(from || dateFrom || 'all')}_${formatDateForFile(to || dateTo || 'all')}.xlsx`);
+            toast.success('Export completed');
           }}
           onPrint={async ({ from, to }) => {
             const result = await listInteractions({
@@ -269,7 +277,10 @@ export function CustomerInteractionsTable({
               limit: 1000,
               offset: 0,
             });
-            if (!result.success) return;
+            if (!result.success) {
+              toast.error(result.error);
+              return;
+            }
             const win = openPrintWindow({
               title: 'Customer Interactions',
               subtitle: `From ${from || dateFrom || 'start'} to ${to || dateTo || 'now'}`,
@@ -510,7 +521,7 @@ export function CustomerInteractionsTable({
                       {interaction.interactionRef}
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{interaction.companyName || interaction.customerRef || interaction.customerId}</div>
+                      <div className="font-medium">{interaction.companyName || interaction.customerRef || 'Unknown Customer'}</div>
                       <div className="text-xs text-muted-foreground font-mono">{interaction.customerRef}</div>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-sm">
@@ -531,9 +542,9 @@ export function CustomerInteractionsTable({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {employees.find(e => e.id === interaction.employeeId)?.fullName ?? interaction.employeeId}
-                      {employees.find(e => e.id === interaction.employeeId)?.employeeCode && (
-                        <span className="text-muted-foreground ml-1">({employees.find(e => e.id === interaction.employeeId)?.employeeCode})</span>
+                      {interaction.employeeName ?? 'Unknown Employee'}
+                      {interaction.employeeCode && (
+                        <span className="text-muted-foreground ml-1">({interaction.employeeCode})</span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">

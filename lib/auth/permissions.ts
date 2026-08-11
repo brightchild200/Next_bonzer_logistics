@@ -38,6 +38,7 @@ ENQUIRY: {
   INTERACTION: {
     CREATE: 'interaction:create',
     READ_ALL: 'interaction:read_all',
+    READ_TEAM: 'interaction:read_team',
     READ_OWN: 'interaction:read_own',
     UPDATE: 'interaction:update',
     DEACTIVATE: 'interaction:deactivate',

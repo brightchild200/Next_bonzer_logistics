@@ -148,6 +148,8 @@ export interface CustomerInteraction {
   companyName: string;
   enquiryId: string | null;
   employeeId: string;
+  employeeName: string | null;
+  employeeCode: string | null;
   interactionTypeId: string;
   interactionOutcomeId: string;
   subject: string | null;

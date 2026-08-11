@@ -4,6 +4,7 @@ import { createClient } from '@/lib/db/server';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 import type { EnquiryWorkflowRecord, EnquiryStatus } from './types';
+import { startTimer, logPerfEnd, logPerf, endTimer } from '@/lib/perf/timing';
 
 export interface ListAllEnquiriesFilters {
   status?: EnquiryStatus | EnquiryStatus[];
@@ -30,24 +31,36 @@ export interface ListAllEnquiriesError {
 export type ListAllEnquiriesResponse = ListAllEnquiriesResult | ListAllEnquiriesError;
 
 export async function listAllEnquiries(
-  filters: ListAllEnquiriesFilters = {}
+  filters: ListAllEnquiriesFilters = {},
+  traceId?: string
 ): Promise<ListAllEnquiriesResponse> {
-  const supabase = createClient();
+  const totalStart = startTimer();
+  const tid = traceId;
 
+  const clientCreateStart = startTimer();
+  const supabase = createClient();
+  logPerf(tid!, 'createClient', endTimer(clientCreateStart));
+
+  const authStart = startTimer();
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
+  logPerfEnd(tid!, 'auth.getUser', authStart);
 
   if (authError || !user) {
+    logPerfEnd(tid!, 'listAllEnquiries total (unauthorized)', totalStart);
     return { success: false, error: 'Unauthorized' };
   }
 
+  const authContextStart = startTimer();
   const { data: authContext, error: authContextError } = await supabase.rpc(
     'get_my_auth_context'
   );
+  logPerfEnd(tid!, 'get_my_auth_context RPC', authContextStart);
 
   if (authContextError || !authContext) {
+    logPerfEnd(tid!, 'listAllEnquiries total (auth context error)', totalStart);
     return { success: false, error: 'Failed to resolve auth context' };
   }
 
@@ -56,6 +69,7 @@ export async function listAllEnquiries(
     : [];
 
   if (!userPermissions.includes(PERMISSIONS.ADMIN.USER_READ)) {
+    logPerfEnd(tid!, 'listAllEnquiries total (insufficient permissions)', totalStart);
     return { success: false, error: 'Insufficient permissions' };
   }
 
@@ -70,6 +84,7 @@ export async function listAllEnquiries(
       ? [filters.status]
       : undefined;
 
+  const queryStart = startTimer();
   let query = supabase
     .from('enquiries')
     .select(
@@ -116,10 +131,14 @@ export async function listAllEnquiries(
   }
 
   const { data, error, count } = await query;
+  logPerfEnd(tid!, 'enquiry query', queryStart);
 
   if (error) {
+    logPerfEnd(tid!, 'listAllEnquiries total (query error)', totalStart);
     return { success: false, error: 'Failed to fetch all enquiries' };
   }
+
+  logPerfEnd(tid!, 'listAllEnquiries total', totalStart);
 
   return {
     success: true,

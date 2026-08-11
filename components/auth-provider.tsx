@@ -170,6 +170,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRoles([]);
       setPermissions([]);
 
+      // If the stored session is broken, clear it so we don't keep booting
+      // the app into a half-authenticated state.
+      if (!isSigningOutRef.current) {
+        try {
+          await supabase.auth.signOut();
+        } catch (signOutError) {
+          console.error('Failed to clear broken session:', signOutError);
+        }
+        setUser(null);
+        userRef.current = null;
+      }
+
       return;
     }
 
@@ -191,9 +203,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     async function initializeAuth() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      let session = null;
+      try {
+        const result = await supabase.auth.getSession();
+        session = result.data.session;
+      } catch (error) {
+        console.error('Failed to restore session:', error);
+        try {
+          await supabase.auth.signOut();
+        } catch (signOutError) {
+          console.error('Failed to clear invalid restored session:', signOutError);
+        }
+      }
 
       if (!active) return;
 

@@ -24,6 +24,8 @@ export interface EnquiryWorkflowRecord {
   lost_at: string | null;
   archived_at: string | null;
   closed_by: string | null;
+  shipper_id: string | null;
+  consignee_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -71,4 +73,24 @@ export interface CreateEnquiryInput {
   expected_shipment_date?: string | null;
   notes?: string | null;
   status?: EnquiryStatus;
+  shipper_id?: string | null;
+  consignee_id?: string | null;
+}
+
+export interface UpdateEnquiryInput {
+  id: string;
+  reference?: string;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  origin?: string;
+  destination?: string;
+  mode?: string;
+  cargo_type?: string | null;
+  weight_kg?: string | number | null;
+  volume_cbm?: string | number | null;
+  incoterm?: string | null;
+  expected_shipment_date?: string | null;
+  notes?: string | null;
+  shipper_id?: string | null;
+  consignee_id?: string | null;
 }

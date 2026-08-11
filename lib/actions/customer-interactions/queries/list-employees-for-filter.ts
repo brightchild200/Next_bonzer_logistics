@@ -1,6 +1,8 @@
 'use server';
 
 import { createClient } from '@/lib/db/server';
+import { createAdminClient } from '@/lib/db/admin';
+import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 
 export interface EmployeeOption {
@@ -20,6 +22,25 @@ export interface ListEmployeesForFilterError {
 }
 
 export type ListEmployeesForFilterResponse = ListEmployeesForFilterResult | ListEmployeesForFilterError;
+
+async function getSalespersonTeamMemberIds(supabase: ReturnType<typeof createClient>, currentUserId: string): Promise<string[]> {
+  const { data: roleData } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('name', 'salesperson')
+    .single();
+
+  if (!roleData) {
+    return [];
+  }
+
+  const { data: teamMembers } = await supabase
+    .from('user_roles')
+    .select('user_id')
+    .eq('role_id', roleData.id);
+
+  return (teamMembers ?? []).map(m => m.user_id).filter(id => id !== currentUserId);
+}
 
 export async function listEmployeesForFilter(): Promise<ListEmployeesForFilterResponse> {
   const supabase = createClient();
@@ -41,24 +62,46 @@ export async function listEmployeesForFilter(): Promise<ListEmployeesForFilterRe
     return { success: false, error: 'Failed to resolve auth context' };
   }
 
-const userPermissions: Permission[] = Array.isArray(authContext.permissions)
+  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
     ? authContext.permissions
     : [];
 
-  const canReadInteraction =
-    userPermissions.includes('interaction:read_all') ||
-    userPermissions.includes('interaction:read_own') ||
-    userPermissions.includes('interaction:create');
+  const hasReadAll = userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL);
+  const hasReadTeam = userPermissions.includes(PERMISSIONS.INTERACTION.READ_TEAM);
+  const hasReadOwn = userPermissions.includes(PERMISSIONS.INTERACTION.READ_OWN);
 
-  if (!canReadInteraction) {
+  if (!hasReadAll && !hasReadTeam && !hasReadOwn && !userPermissions.includes(PERMISSIONS.INTERACTION.CREATE)) {
     return { success: false, error: 'Insufficient permissions' };
   }
 
-  const { data, error } = await supabase
+  const adminClient = createAdminClient();
+
+  let query = adminClient
     .from('profiles')
     .select('id, full_name, employee_code')
     .eq('is_active', true)
     .order('full_name', { ascending: true });
+
+  if (!hasReadAll) {
+    const allowedEmployeeIds = new Set<string>();
+
+    if (hasReadTeam) {
+      const teamMemberIds = await getSalespersonTeamMemberIds(supabase, user.id);
+      teamMemberIds.forEach((id) => allowedEmployeeIds.add(id));
+    }
+
+    if (hasReadOwn) {
+      allowedEmployeeIds.add(user.id);
+    }
+
+    if (allowedEmployeeIds.size === 0) {
+      return { success: true, employees: [] };
+    }
+
+    query = query.in('id', Array.from(allowedEmployeeIds));
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('[listEmployeesForFilter] Query error:', error);

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, Download, Package, Plane, Ship, Truck, Train, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Card } from '@/components/ui/card';
@@ -44,6 +45,10 @@ interface EnquiriesClientProps {
   source: 'own' | 'assigned' | 'team' | 'all';
 }
 
+function generateTraceId(): string {
+  return Math.random().toString(36).substring(2, 10);
+}
+
 export function EnquiriesClient({
   initialEnquiries,
   initialTotal,
@@ -56,6 +61,7 @@ export function EnquiriesClient({
   initialSortDir,
   source,
 }: EnquiriesClientProps) {
+  const router = useRouter();
   const [enquiries, setEnquiries] = useState<Enquiry[]>(initialEnquiries);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(initialPage - 1);
@@ -66,7 +72,22 @@ export function EnquiriesClient({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir);
   const [loading, setLoading] = useState(false);
 
+  const traceId = generateTraceId();
+  const mountStart = performance.now();
+
+  useEffect(() => {
+    const mountDuration = Math.round(performance.now() - mountStart);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[PERF][ENQUIRIES-CLIENT][${traceId}] component mount: ${mountDuration}ms`);
+      console.log(`[PERF][ENQUIRIES-CLIENT][${traceId}] initial data received: ${initialEnquiries.length} enquiries, total: ${initialTotal}`);
+    }
+  }, []);
+
   const PAGE_SIZE = 10;
+
+  const handleRowClick = (enquiryId: string) => {
+    router.push(`/enquiries/${enquiryId}`);
+  };
 
   const fetchEnquiries = async () => {
     setLoading(true);
@@ -384,7 +405,11 @@ export function EnquiriesClient({
                 enquiries.map((e) => {
                   const ModeIcon = modeIcons[e.mode] ?? Package;
                   return (
-                    <TableRow key={e.id} className="cursor-pointer hover:bg-muted/40">
+                    <TableRow
+                      key={e.id}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => handleRowClick(e.id)}
+                    >
                       <TableCell className="font-mono text-xs font-medium">{e.reference}</TableCell>
                       <TableCell className="font-medium">{e.customer_name ?? '—'}</TableCell>
                       <TableCell>

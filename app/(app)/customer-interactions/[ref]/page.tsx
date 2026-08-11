@@ -2,7 +2,6 @@ import { getInteractionByRef } from '@/lib/actions/customer-interactions/queries
 import { listInteractionTypes } from '@/lib/actions/customer-interactions/queries/list-interaction-types';
 import { listInteractionOutcomes } from '@/lib/actions/customer-interactions/queries/list-interaction-outcomes';
 import { listFollowups } from '@/lib/actions/customer-interactions/queries/list-followups';
-import { getEmployee } from '@/lib/actions/customer-interactions/queries/get-employee';
 import { InteractionDetail } from '@/components/interaction-detail';
 
 interface InteractionDetailPageProps {
@@ -25,20 +24,6 @@ export default async function InteractionDetailPage({
   const interactionTypes = typesRes.success ? typesRes.types : [];
   const interactionOutcomes = outcomesRes.success ? outcomesRes.outcomes : [];
   const followups = followupsRes.success ? followupsRes.followups : [];
-
-  let employee = null;
-  if (interaction) {
-    const [followupsRes2, employeeRes] = await Promise.all([
-      listFollowups({ interactionId: interaction.id, limit: 50, offset: 0 }),
-      getEmployee(interaction.employeeId),
-    ]);
-    if (followupsRes2.success) {
-      // followups already fetched above but need correct interactionId
-    }
-    if (employeeRes.success) {
-      employee = employeeRes.employee;
-    }
-  }
 
   if (!interaction) {
     return (
@@ -63,7 +48,6 @@ export default async function InteractionDetailPage({
       interactionTypes={interactionTypes}
       interactionOutcomes={interactionOutcomes}
       followups={followupsCorrect}
-      employee={employee}
     />
   );
 }

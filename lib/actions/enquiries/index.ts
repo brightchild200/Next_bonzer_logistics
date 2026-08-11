@@ -8,3 +8,5 @@ export * from './list-enquiries';
 export * from './create-enquiry';
 export * from './assign-enquiry';
 export * from './update-enquiry-status';
+export * from './update-enquiry';
+export * from './get-enquiry-activities';

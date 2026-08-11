@@ -1,6 +1,7 @@
 'use server';
 
 import { listEnquiries, type ListEnquiriesFilters, type ListEnquiriesResponse, type EnquiryWorkflowRecord } from '@/lib/actions/enquiries';
+import { generateTraceId, startTimer, logPerfEnd } from '@/lib/perf/timing';
 
 export interface EnquiriesPageData {
   enquiries: EnquiryWorkflowRecord[];
@@ -13,8 +14,13 @@ export interface EnquiriesPageData {
 export async function getEnquiriesPageData(
   filters: ListEnquiriesFilters = {}
 ): Promise<EnquiriesPageData> {
-  const result: ListEnquiriesResponse = await listEnquiries(filters);
-  
+  const traceId = generateTraceId();
+  const totalStart = startTimer();
+
+  const result: ListEnquiriesResponse = await listEnquiries(filters, traceId);
+
+  logPerfEnd(traceId, 'getEnquiriesPageData total', totalStart);
+
   if (!result.success) {
     return {
       enquiries: [],

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/db/server';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 import type { EnquiryWorkflowRecord, ListEnquiriesFilters } from './types';
+import { startTimer, logPerfEnd, logPerf, endTimer } from '@/lib/perf/timing';
 
 export interface ListMyEnquiriesResult {
   success: true;
@@ -21,24 +22,36 @@ export interface ListMyEnquiriesError {
 export type ListMyEnquiriesResponse = ListMyEnquiriesResult | ListMyEnquiriesError;
 
 export async function listMyEnquiries(
-  filters: ListEnquiriesFilters = {}
+  filters: ListEnquiriesFilters = {},
+  traceId?: string
 ): Promise<ListMyEnquiriesResponse> {
-  const supabase = createClient();
+  const totalStart = startTimer();
+  const tid = traceId;
 
+  const clientCreateStart = startTimer();
+  const supabase = createClient();
+  logPerf(tid!, 'createClient', endTimer(clientCreateStart));
+
+  const authStart = startTimer();
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
+  logPerfEnd(tid!, 'auth.getUser', authStart);
 
   if (authError || !user) {
+    logPerfEnd(tid!, 'listMyEnquiries total (unauthorized)', totalStart);
     return { success: false, error: 'Unauthorized' };
   }
 
+  const authContextStart = startTimer();
   const { data: authContext, error: authContextError } = await supabase.rpc(
     'get_my_auth_context'
   );
+  logPerfEnd(tid!, 'get_my_auth_context RPC', authContextStart);
 
   if (authContextError || !authContext) {
+    logPerfEnd(tid!, 'listMyEnquiries total (auth context error)', totalStart);
     return { success: false, error: 'Failed to resolve auth context' };
   }
 
@@ -50,6 +63,7 @@ export async function listMyEnquiries(
     !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_OWN) &&
     !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM)
   ) {
+    logPerfEnd(tid!, 'listMyEnquiries total (insufficient permissions)', totalStart);
     return { success: false, error: 'Insufficient permissions' };
   }
 
@@ -64,6 +78,7 @@ export async function listMyEnquiries(
       ? [filters.status]
       : undefined;
 
+  const queryStart = startTimer();
   let query = supabase
     .from('enquiries')
     .select(
@@ -111,10 +126,14 @@ export async function listMyEnquiries(
   }
 
   const { data, error, count } = await query;
+  logPerfEnd(tid!, 'enquiry query', queryStart);
 
   if (error) {
+    logPerfEnd(tid!, 'listMyEnquiries total (query error)', totalStart);
     return { success: false, error: 'Failed to fetch enquiries' };
   }
+
+  logPerfEnd(tid!, 'listMyEnquiries total', totalStart);
 
   return {
     success: true,
