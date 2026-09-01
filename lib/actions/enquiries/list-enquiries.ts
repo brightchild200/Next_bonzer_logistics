@@ -4,7 +4,7 @@ import { listMyEnquiries, type ListMyEnquiriesResponse } from './list-my-enquiri
 import { listCustomerServiceEnquiries, type ListCustomerServiceEnquiriesResponse } from './list-customer-service-enquiries';
 import { listTeamEnquiries, type ListTeamEnquiriesResponse } from './list-team-enquiries';
 import { listAllEnquiries, type ListAllEnquiriesResponse } from './list-all-enquiries';
-import { createClient } from '@/lib/db/server';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
 import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { Permission } from '@/lib/auth/permissions';
 import type { EnquiryWorkflowRecord, ListEnquiriesFilters, EnquiryStatus } from './types';
@@ -35,52 +35,31 @@ export async function listEnquiries(
   const totalStart = startTimer();
   const tid = traceId;
 
-  const clientCreateStart = startTimer();
-  const supabase = createClient();
-  logPerf(tid!, 'createClient', endTimer(clientCreateStart));
+  const authResult = await getAuthContext();
 
-  const authStart = startTimer();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  logPerfEnd(tid!, 'auth.getUser', authStart);
-
-  if (authError || !user) {
+  if (!authResult.success) {
     logPerfEnd(tid!, 'listEnquiries total (unauthorized)', totalStart);
-    return { success: false, error: 'Unauthorized' };
+    return authResult;
   }
 
-  const authContextStart = startTimer();
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
-  logPerfEnd(tid!, 'get_my_auth_context RPC', authContextStart);
-
-  if (authContextError || !authContext) {
-    logPerfEnd(tid!, 'listEnquiries total (auth context error)', totalStart);
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
+  const authContext: AuthContext = authResult.authContext;
+  const userPermissions: Permission[] = authContext.permissions;
 
   const branchStart = startTimer();
   let branchName = 'unknown';
   let result: BranchResult;
 
   // Priority: Admin (read_all) > Sales Manager (read_team) > Customer Service (read_assigned) > Salesperson (read_own)
-  if (userPermissions.includes(PERMISSIONS.ADMIN.USER_READ)) {
+  if (hasPermission(authContext, PERMISSIONS.ADMIN.USER_READ)) {
     branchName = 'listAllEnquiries';
     result = await listAllEnquiries(filters, tid);
-  } else if (userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM)) {
+  } else if (hasPermission(authContext, PERMISSIONS.ENQUIRY.READ_TEAM)) {
     branchName = 'listTeamEnquiries';
     result = await listTeamEnquiries(filters, tid);
-  } else if (userPermissions.includes(PERMISSIONS.ENQUIRY.READ_ASSIGNED)) {
+  } else if (hasPermission(authContext, PERMISSIONS.ENQUIRY.READ_ASSIGNED)) {
     branchName = 'listCustomerServiceEnquiries';
     result = await listCustomerServiceEnquiries(filters, tid);
-  } else if (userPermissions.includes(PERMISSIONS.ENQUIRY.READ_OWN)) {
+  } else if (hasPermission(authContext, PERMISSIONS.ENQUIRY.READ_OWN)) {
     branchName = 'listMyEnquiries';
     result = await listMyEnquiries(filters, tid);
   } else {

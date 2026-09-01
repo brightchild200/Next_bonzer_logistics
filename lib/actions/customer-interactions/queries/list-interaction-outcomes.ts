@@ -1,8 +1,8 @@
 'use server';
 
-import { createClient } from '@/lib/db/server';
+import { unstable_cache } from 'next/cache';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
 import { PERMISSIONS } from '@/lib/auth/permissions';
-import type { Permission } from '@/lib/auth/permissions';
 import type { InteractionOutcome } from '../types';
 
 type InteractionOutcomeRow = {
@@ -29,38 +29,9 @@ export interface ListInteractionOutcomesError {
 
 export type ListInteractionOutcomesResponse = ListInteractionOutcomesResult | ListInteractionOutcomesError;
 
-export async function listInteractionOutcomes(): Promise<ListInteractionOutcomesResponse> {
+async function fetchInteractionOutcomes(): Promise<InteractionOutcome[]> {
+  const { createClient } = await import('@/lib/db/server');
   const supabase = createClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: 'Unauthorized' };
-  }
-
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
-
-  if (authContextError || !authContext) {
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
-
-  const canReadInteraction =
-    userPermissions.includes('interaction:read_all') ||
-    userPermissions.includes('interaction:read_own') ||
-    userPermissions.includes('interaction:create');
-
-  if (!canReadInteraction) {
-    return { success: false, error: 'Insufficient permissions' };
-  }
 
   const { data, error } = await supabase
     .from('interaction_outcomes')
@@ -70,24 +41,53 @@ const userPermissions: Permission[] = Array.isArray(authContext.permissions)
 
   if (error) {
     console.error('[listInteractionOutcomes] Query error:', error);
-    return { success: false, error: 'Failed to fetch interaction outcomes' };
+    throw new Error('Failed to fetch interaction outcomes');
   }
 
-  return {
-    success: true,
-    outcomes: (data ?? []).map((outcome) => {
-      const row = outcome as InteractionOutcomeRow;
-      return {
-        id: row.id,
-        code: row.code,
-        name: row.name,
-        description: row.description,
-        displayOrder: row.display_order,
-        isSystem: row.is_system,
-        isActive: row.is_active,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      } satisfies InteractionOutcome;
-    }),
-  };
+  return (data ?? []).map((outcome) => {
+    const row = outcome as InteractionOutcomeRow;
+    return {
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      description: row.description,
+      displayOrder: row.display_order,
+      isSystem: row.is_system,
+      isActive: row.is_active,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    } satisfies InteractionOutcome;
+  });
+}
+
+const getCachedInteractionOutcomes = unstable_cache(
+  fetchInteractionOutcomes,
+  ['interaction-outcomes'],
+  { revalidate: 3600, tags: ['interaction-outcomes'] }
+);
+
+export async function listInteractionOutcomes(): Promise<ListInteractionOutcomesResponse> {
+  const authResult = await getAuthContext();
+
+  if (!authResult.success) {
+    return authResult;
+  }
+
+  const authContext: AuthContext = authResult.authContext;
+
+  const canReadInteraction =
+    hasPermission(authContext, PERMISSIONS.INTERACTION.READ_ALL) ||
+    hasPermission(authContext, PERMISSIONS.INTERACTION.READ_OWN) ||
+    hasPermission(authContext, PERMISSIONS.INTERACTION.CREATE);
+
+  if (!canReadInteraction) {
+    return { success: false, error: 'Insufficient permissions' };
+  }
+
+  try {
+    const outcomes = await getCachedInteractionOutcomes();
+    return { success: true, outcomes };
+  } catch {
+    return { success: false, error: 'Failed to fetch interaction outcomes' };
+  }
 }

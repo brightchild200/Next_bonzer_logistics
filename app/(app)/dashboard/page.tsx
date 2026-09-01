@@ -209,7 +209,7 @@ const aiInsights = [
 ];
 
 const quickActions = [
-  { label: 'New Enquiry', icon: FileText, href: '/enquiries?new=true' },
+  { label: 'New Enquiry', icon: FileText, href: '/enquiries/new' },
   { label: 'New Shipment', icon: Package, href: '/shipments?new=true' },
   { label: 'New Invoice', icon: DollarSign, href: '/invoices?new=true' },
   { label: 'Add Customer', icon: Users, href: '/customers?new=true' },

@@ -67,7 +67,13 @@ const createInteractionSchema = z.object({
   interactionDurationMinutes: z.number().int().min(0).nullable().optional(),
   followupDate: z.string().optional(),
   followupTime: z.string().optional(),
-});
+}).refine(
+  (data) => (!data.followupDate && !data.followupTime) || (Boolean(data.followupDate) && Boolean(data.followupTime)),
+  {
+    message: 'Enter both follow-up date and time, or leave both empty',
+    path: ['followupDate'],
+  }
+);
 
 type CreateInteractionFormData = z.infer<typeof createInteractionSchema>;
 
@@ -372,7 +378,7 @@ const form = useForm<CreateInteractionFormData>({
       const interactionRef = result.interaction.interactionRef;
 
       if (data.followupDate && data.followupTime) {
-        const followupDateTime = `${data.followupDate}T${data.followupTime}`;
+        const followupDateTime = new Date(`${data.followupDate}T${data.followupTime}`).toISOString();
         const followupResult = await createFollowup({
           interactionId,
           dueAt: followupDateTime,
@@ -953,5 +959,4 @@ const form = useForm<CreateInteractionFormData>({
     </div>
   );
 }
-
 

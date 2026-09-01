@@ -1,7 +1,8 @@
 'use server';
 
-import { createClient } from '@/lib/db/server';
-import type { Permission } from '@/lib/auth/permissions';
+import { unstable_cache } from 'next/cache';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
+import { PERMISSIONS } from '@/lib/auth/permissions';
 
 export interface CustomerOption {
   id: string;
@@ -23,33 +24,9 @@ export interface ListCustomersForFilterError {
 
 export type ListCustomersForFilterResponse = ListCustomersForFilterResult | ListCustomersForFilterError;
 
-export async function listCustomersForFilter(): Promise<ListCustomersForFilterResponse> {
+async function fetchAllCustomers(): Promise<CustomerOption[]> {
+  const { createClient } = await import('@/lib/db/server');
   const supabase = createClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: 'Unauthorized' };
-  }
-
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
-
-  if (authContextError || !authContext) {
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
-
-  if (!userPermissions.includes('customer:read')) {
-    return { success: false, error: 'Insufficient permissions' };
-  }
 
   const { data, error } = await supabase
     .from('customers')
@@ -60,17 +37,41 @@ export async function listCustomersForFilter(): Promise<ListCustomersForFilterRe
 
   if (error) {
     console.error('[listCustomersForFilter] Query error:', error);
-    return { success: false, error: 'Failed to fetch customers' };
+    throw new Error('Failed to fetch customers');
   }
 
-  return {
-    success: true,
-    customers: (data ?? []).map((c) => ({
-      id: c.id,
-      customerRef: c.customer_ref,
-      companyName: c.company_name,
-      city: c.city,
-      state: c.state,
-    })),
-  };
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    customerRef: c.customer_ref,
+    companyName: c.company_name,
+    city: c.city,
+    state: c.state,
+  }));
+}
+
+const getCachedAllCustomers = unstable_cache(
+  fetchAllCustomers,
+  ['customers-for-filter'],
+  { revalidate: 300, tags: ['customers-for-filter'] }
+);
+
+export async function listCustomersForFilter(): Promise<ListCustomersForFilterResponse> {
+  const authResult = await getAuthContext();
+
+  if (!authResult.success) {
+    return authResult;
+  }
+
+  const authContext: AuthContext = authResult.authContext;
+
+  if (!hasPermission(authContext, PERMISSIONS.CUSTOMER.READ)) {
+    return { success: false, error: 'Insufficient permissions' };
+  }
+
+  try {
+    const customers = await getCachedAllCustomers();
+    return { success: true, customers };
+  } catch {
+    return { success: false, error: 'Failed to fetch customers' };
+  }
 }

@@ -180,19 +180,24 @@ export function CustomerWorkspace() {
 
   const searchParams = useSearchParams();
   const customerIdParam = searchParams.get('customerId');
+  const viewCustomerParam = searchParams.get('view') === 'true';
 
   useEffect(() => {
     void loadCustomers('', 0);
   }, [loadCustomers]);
 
   useEffect(() => {
-    if (customerIdParam && !editDialogOpen) {
+    if (customerIdParam && !editDialogOpen && !detailsDialogOpen) {
       const customer = customers.find(c => c.id === customerIdParam);
       if (customer) {
-        openEditDialog(customer);
+        if (viewCustomerParam) {
+          openDetailsDialog(customer);
+        } else {
+          openEditDialog(customer);
+        }
       }
     }
-  }, [customerIdParam, customers, editDialogOpen]);
+  }, [customerIdParam, customers, detailsDialogOpen, editDialogOpen, viewCustomerParam]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -855,7 +860,10 @@ export function CustomerWorkspace() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDetailsDialog(customer);
+                          }}
                           aria-label="View customer"
                         >
                           <Eye className="h-4 w-4" />

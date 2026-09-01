@@ -23,6 +23,7 @@ export interface KycRecord {
 export interface ListKycParams {
   search?: string;
   status?: KycStatusFilter;
+  enquiryOnly?: boolean;
   page?: number;
   pageSize?: number;
   sortBy?: keyof KycRecord;

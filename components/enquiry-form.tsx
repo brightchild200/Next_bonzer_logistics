@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Loader2, Check, ArrowLeft, ArrowRight, Upload, X } from 'lucide-react';
 import {
   Dialog,
@@ -20,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { Customer } from '@/lib/supabase';
+import type { Customer } from '@/lib/actions/customers/types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { createEnquiry } from '@/lib/actions/enquiries';
@@ -41,16 +40,17 @@ export function EnquiryForm({
   setOpen,
   enquiry,
   onSaved,
+  customers: initialCustomers = [],
 }: {
   open: boolean;
   setOpen: (v: boolean) => void;
+  customers?: Customer[];
   enquiry?: { id: string; reference: string; status: string; customer_id?: string | null; customer_name?: string | null; origin?: string | null; destination?: string | null; mode?: string; cargo_type?: string | null; weight_kg?: number | null; volume_cbm?: number | null; incoterm?: string | null; expected_shipment_date?: string | null; notes?: string | null } | null;
   onSaved?: () => void;
 }) {
-  const router = useRouter();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [form, setForm] = useState({
     customer_id: '',
     customer_name: '',
@@ -100,6 +100,10 @@ export function EnquiryForm({
       setStep(0);
     }
   }, [open, enquiry]);
+
+  useEffect(() => {
+    setCustomers(initialCustomers);
+  }, [initialCustomers]);
 
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 

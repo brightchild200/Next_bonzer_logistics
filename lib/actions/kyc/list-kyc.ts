@@ -61,6 +61,7 @@ export async function listKycRecords(params: ListKycParams = {}): Promise<ListKy
   const {
     search = '',
     status = 'all',
+    enquiryOnly = true,
     page = 0,
     pageSize = 20,
     sortBy = 'updated_at',
@@ -98,6 +99,34 @@ export async function listKycRecords(params: ListKycParams = {}): Promise<ListKy
       `,
       { count: 'exact' }
     );
+
+  if (enquiryOnly) {
+    const { data: enquiryCustomers, error: enquiryError } = await supabase
+      .from('enquiries')
+      .select('customer_id');
+
+    if (enquiryError) {
+      console.error('List enquiry-linked customers error:', enquiryError);
+      return {
+        success: false,
+        error: 'Failed to load enquiry-linked customers',
+      };
+    }
+
+    const customerIds = Array.from(
+      new Set(
+        (enquiryCustomers ?? [])
+          .map((enquiry) => enquiry.customer_id)
+          .filter((customerId): customerId is string => Boolean(customerId))
+      )
+    );
+
+    if (customerIds.length === 0) {
+      return { success: true, records: [], totalCount: 0 };
+    }
+
+    query = query.in('id', customerIds);
+  }
 
   if (status !== 'all') {
     query = query.eq('kyc_status', status);

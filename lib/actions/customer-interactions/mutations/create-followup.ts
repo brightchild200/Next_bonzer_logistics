@@ -107,6 +107,28 @@ export async function createFollowup(
     return { success: false, error: 'Failed to create follow-up' };
   }
 
+  if (status === 'Pending') {
+    const { error: notificationError } = await supabase
+      .from('notifications')
+      .insert({
+        recipient_id: user.id,
+        title: 'Follow-up scheduled',
+        message: `Follow-up ${followupRef} is scheduled for ${new Date(input.dueAt).toLocaleString('en-IN')}.`,
+        severity: 'info',
+        channel: 'in_app',
+        metadata: {
+          followupId: followup.id,
+          interactionId: input.interactionId,
+          followupRef,
+          dueAt: input.dueAt,
+        },
+      });
+
+    if (notificationError) {
+      console.error('[createFollowup] Notification insert error:', notificationError);
+    }
+  }
+
   return {
     success: true,
     followup: followup as InteractionFollowup,

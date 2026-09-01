@@ -1,9 +1,9 @@
 'use server';
 
-import { createClient } from '@/lib/db/server';
+import { unstable_cache } from 'next/cache';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
 import { createAdminClient } from '@/lib/db/admin';
 import { PERMISSIONS } from '@/lib/auth/permissions';
-import type { Permission } from '@/lib/auth/permissions';
 
 export interface EmployeeOption {
   id: string;
@@ -23,7 +23,10 @@ export interface ListEmployeesForFilterError {
 
 export type ListEmployeesForFilterResponse = ListEmployeesForFilterResult | ListEmployeesForFilterError;
 
-async function getSalespersonTeamMemberIds(supabase: ReturnType<typeof createClient>, currentUserId: string): Promise<string[]> {
+async function getSalespersonTeamMemberIds(currentUserId: string): Promise<string[]> {
+  const { createClient } = await import('@/lib/db/server');
+  const supabase = createClient();
+
   const { data: roleData } = await supabase
     .from('roles')
     .select('id')
@@ -42,78 +45,76 @@ async function getSalespersonTeamMemberIds(supabase: ReturnType<typeof createCli
   return (teamMembers ?? []).map(m => m.user_id).filter(id => id !== currentUserId);
 }
 
-export async function listEmployeesForFilter(): Promise<ListEmployeesForFilterResponse> {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: 'Unauthorized' };
-  }
-
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
-
-  if (authContextError || !authContext) {
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
-
-  const hasReadAll = userPermissions.includes(PERMISSIONS.INTERACTION.READ_ALL);
-  const hasReadTeam = userPermissions.includes(PERMISSIONS.INTERACTION.READ_TEAM);
-  const hasReadOwn = userPermissions.includes(PERMISSIONS.INTERACTION.READ_OWN);
-
-  if (!hasReadAll && !hasReadTeam && !hasReadOwn && !userPermissions.includes(PERMISSIONS.INTERACTION.CREATE)) {
-    return { success: false, error: 'Insufficient permissions' };
-  }
-
+async function fetchAllEmployees(): Promise<EmployeeOption[]> {
   const adminClient = createAdminClient();
 
-  let query = adminClient
+  const { data, error } = await adminClient
     .from('profiles')
     .select('id, full_name, employee_code')
     .eq('is_active', true)
     .order('full_name', { ascending: true });
 
-  if (!hasReadAll) {
+  if (error) {
+    console.error('[listEmployeesForFilter] Query error:', error);
+    throw new Error('Failed to fetch employees');
+  }
+
+  return (data ?? []).map((e) => ({
+    id: e.id,
+    fullName: e.full_name,
+    employeeCode: e.employee_code,
+  }));
+}
+
+const getCachedAllEmployees = unstable_cache(
+  fetchAllEmployees,
+  ['employees-for-filter'],
+  { revalidate: 300, tags: ['employees-for-filter'] }
+);
+
+export async function listEmployeesForFilter(): Promise<ListEmployeesForFilterResponse> {
+  const authResult = await getAuthContext();
+
+  if (!authResult.success) {
+    return authResult;
+  }
+
+  const authContext: AuthContext = authResult.authContext;
+
+  const hasReadAll = hasPermission(authContext, PERMISSIONS.INTERACTION.READ_ALL);
+  const hasReadTeam = hasPermission(authContext, PERMISSIONS.INTERACTION.READ_TEAM);
+  const hasReadOwn = hasPermission(authContext, PERMISSIONS.INTERACTION.READ_OWN);
+  const hasCreate = hasPermission(authContext, PERMISSIONS.INTERACTION.CREATE);
+
+  if (!hasReadAll && !hasReadTeam && !hasReadOwn && !hasCreate) {
+    return { success: false, error: 'Insufficient permissions' };
+  }
+
+  try {
+    const allEmployees = await getCachedAllEmployees();
+
+    if (hasReadAll) {
+      return { success: true, employees: allEmployees };
+    }
+
     const allowedEmployeeIds = new Set<string>();
 
     if (hasReadTeam) {
-      const teamMemberIds = await getSalespersonTeamMemberIds(supabase, user.id);
+      const teamMemberIds = await getSalespersonTeamMemberIds(authContext.userId);
       teamMemberIds.forEach((id) => allowedEmployeeIds.add(id));
     }
 
     if (hasReadOwn) {
-      allowedEmployeeIds.add(user.id);
+      allowedEmployeeIds.add(authContext.userId);
     }
 
     if (allowedEmployeeIds.size === 0) {
       return { success: true, employees: [] };
     }
 
-    query = query.in('id', Array.from(allowedEmployeeIds));
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('[listEmployeesForFilter] Query error:', error);
+    const filtered = allEmployees.filter((e) => allowedEmployeeIds.has(e.id));
+    return { success: true, employees: filtered };
+  } catch {
     return { success: false, error: 'Failed to fetch employees' };
   }
-
-  return {
-    success: true,
-    employees: (data ?? []).map((e) => ({
-      id: e.id,
-      fullName: e.full_name,
-      employeeCode: e.employee_code,
-    })),
-  };
 }

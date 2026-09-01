@@ -306,7 +306,7 @@ export function EnquiriesClient({
             win?.print();
           }}
         />
-        <Button size="sm" className="gap-1.5">
+        <Button size="sm" className="gap-1.5" onClick={() => router.push('/enquiries/new')}>
           <Plus className="h-4 w-4" /> New Enquiry
         </Button>
       </PageHeader>

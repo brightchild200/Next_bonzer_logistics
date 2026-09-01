@@ -284,7 +284,7 @@ const [editData, setEditData] = useState({
       const result = await convertInteractionToEnquiry(interaction.id);
       if (result.success) {
         toast.success('Enquiry created successfully');
-        router.push(`/enquiries?detail=${result.enquiryId}`);
+        router.push(`/enquiries/${result.enquiryId}`);
         router.refresh();
       } else {
         toast.error(result.error);
@@ -318,7 +318,7 @@ const [editData, setEditData] = useState({
   };
 
   const handleOpenCustomer = () => {
-    router.push(`/admin/customers?customerId=${interaction.customerId}`);
+    router.push(`/admin/customers?customerId=${interaction.customerId}&view=true`);
   };
 
   const handleViewList = () => {

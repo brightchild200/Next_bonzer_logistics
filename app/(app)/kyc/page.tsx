@@ -98,6 +98,7 @@ export default function KycPage() {
       const result = await listKycRecords({
         search,
         status: statusFilter,
+        enquiryOnly: true,
         page,
         pageSize: PAGE_SIZE,
         sortBy,
@@ -192,7 +193,7 @@ export default function KycPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="KYC Management"
-        description={`${total} KYC records${statusFilter !== 'all' ? ` (${statusOptions.find(s => s.value === statusFilter)?.label})` : ''}`}
+        description={`${total} enquiry-linked customer KYC records${statusFilter !== 'all' ? ` (${statusOptions.find(s => s.value === statusFilter)?.label})` : ''}`}
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'KYC', isCurrent: true },
@@ -205,6 +206,7 @@ export default function KycPage() {
             const result = await listKycRecords({
               search,
               status: statusFilter,
+              enquiryOnly: true,
               page: 0,
               pageSize: 1000,
               sortBy,
@@ -227,6 +229,7 @@ export default function KycPage() {
             const result = await listKycRecords({
               search,
               status: statusFilter,
+              enquiryOnly: true,
               page: 0,
               pageSize: 1000,
               sortBy,

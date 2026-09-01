@@ -24,7 +24,7 @@ export const PERMISSIONS = {
     UPDATE: 'customer:update',
     DEACTIVATE: 'customer:deactivate',
   },
-ENQUIRY: {
+  ENQUIRY: {
     CREATE: 'enquiry:create',
     READ_ASSIGNED: 'enquiry:read_assigned',
     READ_TEAM: 'enquiry:read_team',

@@ -54,7 +54,7 @@ export function Topbar({
             variant="default"
             size="sm"
             className="hidden gap-1.5 sm:flex"
-            onClick={() => router.push('/enquiries?new=true')}
+            onClick={() => router.push('/enquiries/new')}
           >
             <Plus className="h-4 w-4" />
             New Enquiry

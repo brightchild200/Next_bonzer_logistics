@@ -1,7 +1,7 @@
 'use server';
 
-import { createClient } from '@/lib/db/server';
-import type { Permission } from '@/lib/auth/permissions';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
+import { PERMISSIONS } from '@/lib/auth/permissions';
 import type { InteractionType, InteractionOutcome } from '../types';
 
 type InteractionTypeRow = {
@@ -43,32 +43,20 @@ export type GetInteractionTypeResponse = GetInteractionTypeResult | GetInteracti
 export async function getInteractionType(
   typeId: string
 ): Promise<GetInteractionTypeResponse> {
-  const supabase = createClient();
+  const authResult = await getAuthContext();
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: 'Unauthorized' };
+  if (!authResult.success) {
+    return authResult;
   }
 
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
+  const authContext: AuthContext = authResult.authContext;
 
-  if (authContextError || !authContext) {
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
-
-  if (!userPermissions.includes('interaction:read_all')) {
+  if (!hasPermission(authContext, PERMISSIONS.INTERACTION.READ_ALL)) {
     return { success: false, error: 'Insufficient permissions' };
   }
+
+  const { createClient } = await import('@/lib/db/server');
+  const supabase = createClient();
 
   const { data, error } = await supabase
     .from('interaction_types')
@@ -113,32 +101,20 @@ export type GetInteractionOutcomeResponse = GetInteractionOutcomeResult | GetInt
 export async function getInteractionOutcome(
   outcomeId: string
 ): Promise<GetInteractionOutcomeResponse> {
-  const supabase = createClient();
+  const authResult = await getAuthContext();
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: 'Unauthorized' };
+  if (!authResult.success) {
+    return authResult;
   }
 
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
+  const authContext: AuthContext = authResult.authContext;
 
-  if (authContextError || !authContext) {
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
-
-  if (!userPermissions.includes('interaction:read_all')) {
+  if (!hasPermission(authContext, PERMISSIONS.INTERACTION.READ_ALL)) {
     return { success: false, error: 'Insufficient permissions' };
   }
+
+  const { createClient } = await import('@/lib/db/server');
+  const supabase = createClient();
 
   const { data, error } = await supabase
     .from('interaction_outcomes')

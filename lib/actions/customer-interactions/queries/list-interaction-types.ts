@@ -1,8 +1,8 @@
 'use server';
 
-import { createClient } from '@/lib/db/server';
+import { unstable_cache } from 'next/cache';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
 import { PERMISSIONS } from '@/lib/auth/permissions';
-import type { Permission } from '@/lib/auth/permissions';
 import type { InteractionType } from '../types';
 
 type InteractionTypeRow = {
@@ -29,38 +29,9 @@ export interface ListInteractionTypesError {
 
 export type ListInteractionTypesResponse = ListInteractionTypesResult | ListInteractionTypesError;
 
-export async function listInteractionTypes(): Promise<ListInteractionTypesResponse> {
+async function fetchInteractionTypes(): Promise<InteractionType[]> {
+  const { createClient } = await import('@/lib/db/server');
   const supabase = createClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { success: false, error: 'Unauthorized' };
-  }
-
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
-
-  if (authContextError || !authContext) {
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
-
-  const canReadInteraction =
-    userPermissions.includes('interaction:read_all') ||
-    userPermissions.includes('interaction:read_own') ||
-    userPermissions.includes('interaction:create');
-
-  if (!canReadInteraction) {
-    return { success: false, error: 'Insufficient permissions' };
-  }
 
   const { data, error } = await supabase
     .from('interaction_types')
@@ -70,24 +41,53 @@ const userPermissions: Permission[] = Array.isArray(authContext.permissions)
 
   if (error) {
     console.error('[listInteractionTypes] Query error:', error);
-    return { success: false, error: 'Failed to fetch interaction types' };
+    throw new Error('Failed to fetch interaction types');
   }
 
-  return {
-    success: true,
-    types: (data ?? []).map((type) => {
-      const row = type as InteractionTypeRow;
-      return {
-        id: row.id,
-        code: row.code,
-        name: row.name,
-        description: row.description,
-        displayOrder: row.display_order,
-        isSystem: row.is_system,
-        isActive: row.is_active,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      } satisfies InteractionType;
-    }),
-  };
+  return (data ?? []).map((type) => {
+    const row = type as InteractionTypeRow;
+    return {
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      description: row.description,
+      displayOrder: row.display_order,
+      isSystem: row.is_system,
+      isActive: row.is_active,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    } satisfies InteractionType;
+  });
+}
+
+const getCachedInteractionTypes = unstable_cache(
+  fetchInteractionTypes,
+  ['interaction-types'],
+  { revalidate: 3600, tags: ['interaction-types'] }
+);
+
+export async function listInteractionTypes(): Promise<ListInteractionTypesResponse> {
+  const authResult = await getAuthContext();
+
+  if (!authResult.success) {
+    return authResult;
+  }
+
+  const authContext: AuthContext = authResult.authContext;
+
+  const canReadInteraction =
+    hasPermission(authContext, PERMISSIONS.INTERACTION.READ_ALL) ||
+    hasPermission(authContext, PERMISSIONS.INTERACTION.READ_OWN) ||
+    hasPermission(authContext, PERMISSIONS.INTERACTION.CREATE);
+
+  if (!canReadInteraction) {
+    return { success: false, error: 'Insufficient permissions' };
+  }
+
+  try {
+    const types = await getCachedInteractionTypes();
+    return { success: true, types };
+  } catch {
+    return { success: false, error: 'Failed to fetch interaction types' };
+  }
 }

@@ -1,8 +1,8 @@
 'use server';
 
 import { createClient } from '@/lib/db/server';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
 import { PERMISSIONS } from '@/lib/auth/permissions';
-import type { Permission } from '@/lib/auth/permissions';
 import type { CustomerServiceInboxFilters, EnquiryWorkflowRecord } from './types';
 import { startTimer, logPerfEnd, logPerf, endTimer } from '@/lib/perf/timing';
 
@@ -30,45 +30,25 @@ export async function listCustomerServiceEnquiries(
   const totalStart = startTimer();
   const tid = traceId;
 
-  const clientCreateStart = startTimer();
-  const supabase = createClient();
-  logPerf(tid!, 'createClient', endTimer(clientCreateStart));
+  const authResult = await getAuthContext();
 
-  const authStart = startTimer();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  logPerfEnd(tid!, 'auth.getUser', authStart);
-
-  if (authError || !user) {
+  if (!authResult.success) {
     logPerfEnd(tid!, 'listCustomerServiceEnquiries total (unauthorized)', totalStart);
-    return { success: false, error: 'Unauthorized' };
+    return authResult;
   }
 
-  const authContextStart = startTimer();
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
-  logPerfEnd(tid!, 'get_my_auth_context RPC', authContextStart);
-
-  if (authContextError || !authContext) {
-    logPerfEnd(tid!, 'listCustomerServiceEnquiries total (auth context error)', totalStart);
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
+  const authContext: AuthContext = authResult.authContext;
 
   if (
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM) &&
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.ASSIGN_CS) &&
-    !userPermissions.includes(PERMISSIONS.ADMIN.USER_READ)
+    !hasPermission(authContext, PERMISSIONS.ENQUIRY.READ_TEAM) &&
+    !hasPermission(authContext, PERMISSIONS.ENQUIRY.ASSIGN_CS) &&
+    !hasPermission(authContext, PERMISSIONS.ADMIN.USER_READ)
   ) {
     logPerfEnd(tid!, 'listCustomerServiceEnquiries total (insufficient permissions)', totalStart);
     return { success: false, error: 'Insufficient permissions' };
   }
+
+  const supabase = createClient();
 
   const limit = Math.min(Math.max(filters.limit ?? 20, 1), 100);
   const offset = Math.max(filters.offset ?? 0, 0);

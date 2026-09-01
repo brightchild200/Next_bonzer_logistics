@@ -1,8 +1,8 @@
 'use server';
 
 import { createClient } from '@/lib/db/server';
+import { getAuthContext, hasPermission, type AuthContext } from '@/lib/auth/server-auth';
 import { PERMISSIONS } from '@/lib/auth/permissions';
-import type { Permission } from '@/lib/auth/permissions';
 import type { EnquiryWorkflowRecord, ListEnquiriesFilters } from './types';
 import { startTimer, logPerfEnd, logPerf, endTimer } from '@/lib/perf/timing';
 
@@ -28,44 +28,24 @@ export async function listMyEnquiries(
   const totalStart = startTimer();
   const tid = traceId;
 
-  const clientCreateStart = startTimer();
-  const supabase = createClient();
-  logPerf(tid!, 'createClient', endTimer(clientCreateStart));
+  const authResult = await getAuthContext();
 
-  const authStart = startTimer();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  logPerfEnd(tid!, 'auth.getUser', authStart);
-
-  if (authError || !user) {
+  if (!authResult.success) {
     logPerfEnd(tid!, 'listMyEnquiries total (unauthorized)', totalStart);
-    return { success: false, error: 'Unauthorized' };
+    return authResult;
   }
 
-  const authContextStart = startTimer();
-  const { data: authContext, error: authContextError } = await supabase.rpc(
-    'get_my_auth_context'
-  );
-  logPerfEnd(tid!, 'get_my_auth_context RPC', authContextStart);
-
-  if (authContextError || !authContext) {
-    logPerfEnd(tid!, 'listMyEnquiries total (auth context error)', totalStart);
-    return { success: false, error: 'Failed to resolve auth context' };
-  }
-
-  const userPermissions: Permission[] = Array.isArray(authContext.permissions)
-    ? authContext.permissions
-    : [];
+  const authContext: AuthContext = authResult.authContext;
 
   if (
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_OWN) &&
-    !userPermissions.includes(PERMISSIONS.ENQUIRY.READ_TEAM)
+    !hasPermission(authContext, PERMISSIONS.ENQUIRY.READ_OWN) &&
+    !hasPermission(authContext, PERMISSIONS.ENQUIRY.READ_TEAM)
   ) {
     logPerfEnd(tid!, 'listMyEnquiries total (insufficient permissions)', totalStart);
     return { success: false, error: 'Insufficient permissions' };
   }
+
+  const supabase = createClient();
 
   const limit = Math.min(Math.max(filters.limit ?? 5, 1), 100);
   const offset = Math.max(filters.offset ?? 0, 0);
@@ -111,7 +91,7 @@ export async function listMyEnquiries(
       `,
       { count: 'exact' }
     )
-    .eq('owner_id', user.id)
+    .eq('owner_id', authContext.userId)
     .order(sortBy, { ascending: sortDir === 'asc' })
     .range(offset, offset + limit - 1);
 
