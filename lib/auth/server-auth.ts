@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/db/server';
 import type { Permission } from '@/lib/auth/permissions';
 
@@ -26,13 +27,7 @@ export interface AuthContextError {
 
 export type AuthContextResponse = AuthContextResult | AuthContextError;
 
-const authContextCache = new Map<string, AuthContext>();
-
-function getCacheKey(userId: string): string {
-  return `auth-context:${userId}`;
-}
-
-export async function getAuthContext(): Promise<AuthContextResponse> {
+async function getAuthContextUncached(): Promise<AuthContextResponse> {
   const supabase = createClient();
 
   const {
@@ -42,12 +37,6 @@ export async function getAuthContext(): Promise<AuthContextResponse> {
 
   if (authError || !user) {
     return { success: false, error: 'Unauthorized' };
-  }
-
-  const cacheKey = getCacheKey(user.id);
-  const cached = authContextCache.get(cacheKey);
-  if (cached) {
-    return { success: true, authContext: cached };
   }
 
   const { data: authContext, error: authContextError } = await supabase.rpc(
@@ -77,9 +66,10 @@ export async function getAuthContext(): Promise<AuthContextResponse> {
     permissions: userPermissions,
   };
 
-  authContextCache.set(cacheKey, result);
   return { success: true, authContext: result };
 }
+
+export const getAuthContext = cache(getAuthContextUncached);
 
 export function hasPermission(
   authContext: AuthContext,
@@ -93,10 +83,7 @@ export function hasRole(authContext: AuthContext, role: string): boolean {
   return authContext.roles.includes(role);
 }
 
-export function clearAuthContextCache(userId?: string): void {
-  if (userId) {
-    authContextCache.delete(getCacheKey(userId));
-  } else {
-    authContextCache.clear();
-  }
+export function clearAuthContextCache(_userId?: string): void {
+  // No-op: React.cache() provides request-scoped memoization.
+  // Cache is automatically cleared at the end of each request.
 }

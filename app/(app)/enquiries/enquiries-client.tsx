@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search, Download, Package, Plane, Ship, Truck, Train, Plus } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useCallback } from 'react';
+import { Search, Download, Package, Plane, Ship, Truck, Train, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,9 +19,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TablePagination,
 } from '@/components/ui/table';
-import { supabase } from '@/lib/supabase';
+import { exportEnquiries } from '@/lib/actions/enquiries';
 import type { Enquiry } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +30,8 @@ const modeIcons: Record<string, typeof Plane> = {
   road: Truck,
   rail: Train,
 };
+
+const PAGE_SIZE = 10;
 
 interface EnquiriesClientProps {
   initialEnquiries: Enquiry[];
@@ -45,139 +46,139 @@ interface EnquiriesClientProps {
   source: 'own' | 'assigned' | 'team' | 'all';
 }
 
-function generateTraceId(): string {
-  return Math.random().toString(36).substring(2, 10);
-}
-
 export function EnquiriesClient({
   initialEnquiries,
   initialTotal,
-  initialPage,
-  totalPages,
-  initialSearch,
-  initialStatus,
-  initialMode,
-  initialSortBy,
-  initialSortDir,
   source,
 }: EnquiriesClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [enquiries, setEnquiries] = useState<Enquiry[]>(initialEnquiries);
   const [total, setTotal] = useState(initialTotal);
-  const [page, setPage] = useState(initialPage - 1);
-  const [search, setSearch] = useState(initialSearch);
-  const [status, setStatus] = useState(initialStatus);
-  const [mode, setMode] = useState(initialMode);
-  const [sortBy, setSortBy] = useState(initialSortBy);
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir);
-  const [loading, setLoading] = useState(false);
 
-  const traceId = generateTraceId();
-  const mountStart = performance.now();
+  const currentPage = parseInt(searchParams.get('page') ?? '1', 10);
+  const search = searchParams.get('search') ?? '';
+  const status = searchParams.get('status') ?? 'all';
+  const mode = searchParams.get('mode') ?? 'all';
+  const sortBy = searchParams.get('sortBy') ?? 'updated_at';
+  const sortDir = (searchParams.get('sortDir') as 'asc' | 'desc') ?? 'desc';
 
-  useEffect(() => {
-    const mountDuration = Math.round(performance.now() - mountStart);
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[PERF][ENQUIRIES-CLIENT][${traceId}] component mount: ${mountDuration}ms`);
-      console.log(`[PERF][ENQUIRIES-CLIENT][${traceId}] initial data received: ${initialEnquiries.length} enquiries, total: ${initialTotal}`);
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const updateSearchParams = useCallback(
+    (params: Record<string, string | undefined>) => {
+      const newParams = new URLSearchParams(searchParams);
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === '') {
+          newParams.delete(key);
+        } else {
+          newParams.set(key, value);
+        }
+      });
+      router.push(`/enquiries?${newParams.toString()}`);
+    },
+    [router, searchParams]
+  );
+
+  const handleSearch = (value: string) => {
+    updateSearchParams({ search: value, page: undefined });
+  };
+
+  const handleStatusChange = (value: string) => {
+    updateSearchParams({ status: value, page: undefined });
+  };
+
+  const handleModeChange = (value: string) => {
+    updateSearchParams({ mode: value, page: undefined });
+  };
+
+  const handleSort = (column: string) => {
+    const newSortDir = sortBy === column && sortDir === 'asc' ? 'desc' : 'asc';
+    updateSearchParams({ sortBy: column, sortDir: newSortDir, page: undefined });
+  };
+
+  const handlePageChange = (page: number) => {
+    updateSearchParams({ page: page > 1 ? String(page) : undefined });
+  };
+
+  const handleExport = async ({ from, to }: { from?: string; to?: string }) => {
+    try {
+      const result = await exportEnquiries({
+        search: search || undefined,
+        status: status === 'all' ? undefined : (status as any),
+        mode: mode === 'all' ? undefined : mode,
+        from,
+        to,
+      });
+
+      if (!result.success) {
+        console.error('Export failed:', result.error);
+        return;
+      }
+
+      const rows = result.rows.map((e) => ({
+        Reference: e.reference,
+        Customer: e.customer_name ?? '',
+        Origin: e.origin ?? '',
+        Destination: e.destination ?? '',
+        Mode: e.mode,
+        Status: e.status,
+        Expected: e.expected_shipment_date ?? '',
+        Incoterm: e.incoterm ?? '',
+        Cargo: e.cargo_type ?? '',
+        Weight: e.weight_kg ?? '',
+        Volume: e.volume_cbm ?? '',
+      }));
+
+      const wb = buildWorkbook(rows, 'Enquiries');
+      downloadWorkbook(wb, `enquiries_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
+    } catch (error) {
+      console.error('Export error:', error);
     }
-  }, []);
+  };
 
-  const PAGE_SIZE = 10;
+  const handlePrint = async ({ from, to }: { from?: string; to?: string }) => {
+    try {
+      const result = await exportEnquiries({
+        search: search || undefined,
+        status: status === 'all' ? undefined : (status as any),
+        mode: mode === 'all' ? undefined : mode,
+        from,
+        to,
+      });
+
+      if (!result.success) {
+        console.error('Print failed:', result.error);
+        return;
+      }
+
+      const tableHtml = `
+        <table>
+          <thead><tr><th>Ref</th><th>Customer</th><th>Route</th><th>Mode</th><th>Status</th><th>Expected</th></tr></thead>
+          <tbody>
+            ${result.rows
+              .map(
+                (e) =>
+                  `<tr><td>${e.reference}</td><td>${e.customer_name ?? ''}</td><td>${e.origin ?? ''} → ${e.destination ?? ''}</td><td>${e.mode}</td><td>${e.status}</td><td>${e.expected_shipment_date ? new Date(e.expected_shipment_date).toLocaleDateString() : ''}</td></tr>`
+              )
+              .join('')}
+          </tbody>
+        </table>`;
+
+      const win = openPrintWindow({
+        title: 'Enquiries',
+        subtitle: `From ${from || 'start'} to ${to || 'now'}`,
+        tableHtml,
+      });
+      win?.print();
+    } catch (error) {
+      console.error('Print error:', error);
+    }
+  };
 
   const handleRowClick = (enquiryId: string) => {
     router.push(`/enquiries/${enquiryId}`);
   };
-
-  const fetchEnquiries = async () => {
-    setLoading(true);
-    const offset = page * PAGE_SIZE;
-    let query = supabase
-      .from('enquiries')
-      .select(
-        `
-        id,
-        owner_id,
-        reference,
-        customer_id,
-        customer_name,
-        origin,
-        destination,
-        mode,
-        cargo_type,
-        weight_kg,
-        volume_cbm,
-        incoterm,
-        status,
-        expected_shipment_date,
-        notes,
-        assigned_customer_service_id,
-        assigned_by,
-        assigned_at,
-        quoted_at,
-        won_at,
-        lost_at,
-        archived_at,
-        closed_by,
-        created_at,
-        updated_at
-        `,
-        { count: 'exact' }
-      )
-      .order(sortBy, { ascending: sortDir === 'asc' })
-      .range(offset, offset + PAGE_SIZE - 1);
-
-    if (search) {
-      query = query.or(
-        `reference.ilike.%${search}%,customer_name.ilike.%${search}%,origin.ilike.%${search}%,destination.ilike.%${search}%`
-      );
-    }
-
-    if (status !== 'all') {
-      query = query.eq('status', status);
-    }
-
-    if (mode !== 'all') {
-      query = query.eq('mode', mode);
-    }
-
-    const { data, count, error } = await query;
-    if (error) {
-      console.error(error);
-    } else {
-      setEnquiries(data ?? []);
-      setTotal(count ?? 0);
-    }
-    setLoading(false);
-  };
-
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    setPage(0);
-  };
-
-  const handleStatusChange = (value: string) => {
-    setStatus(value);
-    setPage(0);
-  };
-
-  const handleModeChange = (value: string) => {
-    setMode(value);
-    setPage(0);
-  };
-
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setSortDir('asc');
-    }
-    setPage(0);
-  };
-
-  const totalPagesCalculated = Math.ceil(total / PAGE_SIZE);
-  const showSkeleton = loading && enquiries.length === 0;
 
   return (
     <div className="animate-fade-in">
@@ -185,126 +186,10 @@ export function EnquiriesClient({
         <ExportActions
           exportLabel="Export"
           printLabel="Print"
-          disableExport={loading}
-          disablePrint={loading}
-          onExport={async ({ from, to }) => {
-            let query = supabase
-              .from('enquiries')
-              .select(
-                `
-                id,
-                owner_id,
-                reference,
-                customer_id,
-                customer_name,
-                origin,
-                destination,
-                mode,
-                cargo_type,
-                weight_kg,
-                volume_cbm,
-                incoterm,
-                status,
-                expected_shipment_date,
-                notes,
-                assigned_customer_service_id,
-                assigned_by,
-                assigned_at,
-                quoted_at,
-                won_at,
-                lost_at,
-                archived_at,
-                closed_by,
-                created_at,
-                updated_at
-                `,
-                { count: 'exact' }
-              )
-              .order('created_at', { ascending: false });
-            if (search) {
-              query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%,origin.ilike.%${search}%,destination.ilike.%${search}%`);
-            }
-            if (status !== 'all') {
-              query = query.eq('status', status);
-            }
-            if (mode !== 'all') {
-              query = query.eq('mode', mode);
-            }
-            if (from) query = query.gte('created_at', from);
-            if (to) query = query.lte('created_at', to);
-            const { data } = await query.range(0, 9999);
-            const rows = (data ?? []).map((e) => ({
-              Reference: e.reference,
-              Customer: e.customer_name ?? '',
-              Origin: e.origin ?? '',
-              Destination: e.destination ?? '',
-              Mode: e.mode,
-              Status: e.status,
-              Expected: e.expected_shipment_date ?? '',
-              Incoterm: e.incoterm ?? '',
-              Cargo: e.cargo_type ?? '',
-              Weight: e.weight_kg ?? '',
-              Volume: e.volume_cbm ?? '',
-            }));
-            const wb = buildWorkbook(rows, 'Enquiries');
-            downloadWorkbook(wb, `enquiries_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
-          }}
-          onPrint={async ({ from, to }) => {
-            let query = supabase
-              .from('enquiries')
-              .select(
-                `
-                id,
-                owner_id,
-                reference,
-                customer_id,
-                customer_name,
-                origin,
-                destination,
-                mode,
-                cargo_type,
-                weight_kg,
-                volume_cbm,
-                incoterm,
-                status,
-                expected_shipment_date,
-                notes,
-                assigned_customer_service_id,
-                assigned_by,
-                assigned_at,
-                quoted_at,
-                won_at,
-                lost_at,
-                archived_at,
-                closed_by,
-                created_at,
-                updated_at
-                `,
-                { count: 'exact' }
-              )
-              .order('created_at', { ascending: false });
-            if (search) {
-              query = query.or(`reference.ilike.%${search}%,customer_name.ilike.%${search}%,origin.ilike.%${search}%,destination.ilike.%${search}%`);
-            }
-            if (status !== 'all') {
-              query = query.eq('status', status);
-            }
-            if (mode !== 'all') {
-              query = query.eq('mode', mode);
-            }
-            if (from) query = query.gte('created_at', from);
-            if (to) query = query.lte('created_at', to);
-            const { data } = await query.range(0, 9999);
-            const tableHtml = `
-              <table>
-                <thead><tr><th>Ref</th><th>Customer</th><th>Route</th><th>Mode</th><th>Status</th><th>Expected</th></tr></thead>
-                <tbody>
-                  ${(data ?? []).map((e) => `<tr><td>${e.reference}</td><td>${e.customer_name ?? ''}</td><td>${e.origin ?? ''} → ${e.destination ?? ''}</td><td>${e.mode}</td><td>${e.status}</td><td>${e.expected_shipment_date ? new Date(e.expected_shipment_date).toLocaleDateString() : ''}</td></tr>`).join('')}
-                </tbody>
-              </table>`;
-            const win = openPrintWindow({ title: 'Enquiries', subtitle: `From ${from || 'start'} to ${to || 'now'}`, tableHtml });
-            win?.print();
-          }}
+          disableExport={false}
+          disablePrint={false}
+          onExport={handleExport}
+          onPrint={handlePrint}
         />
         <Button size="sm" className="gap-1.5" onClick={() => router.push('/enquiries/new')}>
           <Plus className="h-4 w-4" /> New Enquiry
@@ -375,19 +260,7 @@ export function EnquiriesClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {showSkeleton ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-36" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                  </TableRow>
-                ))
-              ) : enquiries.length === 0 ? (
+              {enquiries.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-64">
                     <div className="flex flex-col items-center justify-center text-center">
@@ -442,14 +315,30 @@ export function EnquiriesClient({
           </Table>
         </div>
 
-        {enquiries.length > 0 && (
-          <TablePagination
-            currentPage={page}
-            totalPages={totalPagesCalculated}
-            totalItems={total}
-            pageSize={PAGE_SIZE}
-            onPageChange={setPage}
-          />
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <div className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages} · {total} total
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => handlePageChange(currentPage - 1)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => handlePageChange(currentPage + 1)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         )}
       </Card>
     </div>

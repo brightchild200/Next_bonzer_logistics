@@ -10,3 +10,4 @@ export * from './assign-enquiry';
 export * from './update-enquiry-status';
 export * from './update-enquiry';
 export * from './get-enquiry-activities';
+export * from './export-enquiries';

@@ -1,6 +1,3 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import {
   FileText,
   Package,
@@ -43,11 +40,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/lib/supabase';
-import type { ActivityLog } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { getActivities, type ActivityLog } from '@/lib/actions/dashboard/get-activities';
+import { ActivityFeed } from './activity-feed';
 
 const kpis: KpiData[] = [
   {
@@ -222,21 +218,9 @@ const alertStyles = {
   info: { icon: Info, color: 'text-info', bg: 'bg-info/10' },
 };
 
-export default function DashboardPage() {
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase
-      .from('activity_log')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(8)
-      .then(({ data }) => {
-        setActivities(data ?? []);
-        setLoading(false);
-      });
-  }, []);
+export default async function DashboardPage() {
+  const activitiesResult = await getActivities(8);
+  const activities = activitiesResult.success ? activitiesResult.activities : [];
 
   return (
     <div className="animate-fade-in">
@@ -349,51 +333,7 @@ export default function DashboardPage() {
             <h3 className="font-display text-base font-semibold">Recent Activity</h3>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </div>
-          <ScrollArea className="h-[280px] pr-2">
-            {loading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="h-8 w-8 rounded-full" />
-                    <div className="flex-1 space-y-1.5">
-                      <Skeleton className="h-3 w-3/4" />
-                      <Skeleton className="h-2.5 w-1/3" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : activities.length === 0 ? (
-              <div className="flex h-[240px] flex-col items-center justify-center text-center">
-                <Activity className="mb-2 h-8 w-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">No activity yet</p>
-                <p className="text-xs text-muted-foreground/60">
-                  Actions across your workspace will appear here
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {activities.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-muted/50"
-                  >
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                      <Activity className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium leading-tight">{a.action}</p>
-                      {a.description && (
-                        <p className="text-xs text-muted-foreground">{a.description}</p>
-                      )}
-                      <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-                        {new Date(a.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
+          <ActivityFeed activities={activities} />
         </Card>
 
         {/* Real-time Alerts */}
@@ -405,34 +345,32 @@ export default function DashboardPage() {
               Live
             </span>
           </div>
-          <ScrollArea className="h-[280px] pr-2">
-            <div className="space-y-2">
-              {alerts.map((alert, i) => {
-                const style = alertStyles[alert.type as keyof typeof alertStyles];
-                const Icon = style.icon;
-                return (
+          <div className="h-[280px] overflow-y-auto pr-2 space-y-2">
+            {alerts.map((alert, i) => {
+              const style = alertStyles[alert.type as keyof typeof alertStyles];
+              const Icon = style.icon;
+              return (
+                <div
+                  key={i}
+                  className="flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted/30"
+                >
                   <div
-                    key={i}
-                    className="flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted/30"
+                    className={cn(
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                      style.bg
+                    )}
                   >
-                    <div
-                      className={cn(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                        style.bg
-                      )}
-                    >
-                      <Icon className={cn('h-4 w-4', style.color)} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium leading-tight">{alert.title}</p>
-                      <p className="text-xs text-muted-foreground">{alert.desc}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground/70">{alert.time}</p>
-                    </div>
+                    <Icon className={cn('h-4 w-4', style.color)} />
                   </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium leading-tight">{alert.title}</p>
+                    <p className="text-xs text-muted-foreground">{alert.desc}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground/70">{alert.time}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </Card>
 
         {/* AI Insights */}
