@@ -97,8 +97,8 @@ export default function ShipmentsPage() {
               Currency: s.currency,
               Value: s.value,
             }));
-            const wb = buildWorkbook(rows, 'Shipments');
-            downloadWorkbook(wb, `shipments_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
+            const wb = await buildWorkbook(rows, 'Shipments');
+            await downloadWorkbook(wb, `shipments_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
           }}
           onPrint={async ({ from, to }) => {
             let query = supabase

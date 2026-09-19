@@ -1,7 +1,7 @@
 'use client';
 import { useState } from "react";
 
-import { CommandPalette } from '@/components/command-palette';
+import { CommandPaletteLoader } from '@/components/command-palette-loader';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -15,7 +15,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <div className="flex min-h-screen flex-col">
         <main className="flex-1 p-4 lg:p-6">{children}</main>
       </div>
-      <CommandPalette open={cmdOpen} setOpen={setCmdOpen} />
+      <CommandPaletteLoader open={cmdOpen} setOpen={setCmdOpen} />
     </div>
   );
 }

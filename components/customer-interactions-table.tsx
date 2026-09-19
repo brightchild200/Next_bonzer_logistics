@@ -260,8 +260,8 @@ export function CustomerInteractionsTable({
               Employee: row.employeeName ?? 'Unknown Employee',
               Status: row.isActive ? 'Active' : 'Inactive',
             }));
-            const workbook = buildWorkbook(rows, 'Interactions');
-            downloadWorkbook(workbook, `interactions_${formatDateForFile(from || dateFrom || 'all')}_${formatDateForFile(to || dateTo || 'all')}.xlsx`);
+            const workbook = await buildWorkbook(rows, 'Interactions');
+            await downloadWorkbook(workbook, `interactions_${formatDateForFile(from || dateFrom || 'all')}_${formatDateForFile(to || dateTo || 'all')}.xlsx`);
             toast.success('Export completed');
           }}
           onPrint={async ({ from, to }) => {

@@ -222,8 +222,8 @@ export default function KycPage() {
               'Latest Enquiry': r.latest_enquiry_ref ?? '',
               Updated: r.updated_at,
             }));
-            const wb = buildWorkbook(rows, 'KYC');
-            downloadWorkbook(wb, `kyc_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
+            const wb = await buildWorkbook(rows, 'KYC');
+            await downloadWorkbook(wb, `kyc_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
           }}
           onPrint={async ({ from, to }) => {
             const result = await listKycRecords({

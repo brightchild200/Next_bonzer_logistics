@@ -57,6 +57,8 @@ export type Enquiry = {
   lost_at: string | null;
   archived_at: string | null;
   closed_by: string | null;
+  shipper_id: string | null;
+  consignee_id: string | null;
   created_at: string;
   updated_at: string;
 };

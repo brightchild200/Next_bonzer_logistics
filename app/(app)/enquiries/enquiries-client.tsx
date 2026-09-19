@@ -130,8 +130,8 @@ export function EnquiriesClient({
         Volume: e.volume_cbm ?? '',
       }));
 
-      const wb = buildWorkbook(rows, 'Enquiries');
-      downloadWorkbook(wb, `enquiries_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
+      const wb = await buildWorkbook(rows, 'Enquiries');
+      await downloadWorkbook(wb, `enquiries_${formatDateForFile(from || 'all')}_${formatDateForFile(to || 'all')}.xlsx`);
     } catch (error) {
       console.error('Export error:', error);
     }

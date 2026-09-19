@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Sidebar } from '@/components/sidebar';
 import { Topbar } from '@/components/topbar';
-import { CommandPalette } from '@/components/command-palette';
+import { CommandPaletteLoader } from '@/components/command-palette-loader';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Topbar onMenuClick={() => setMobileOpen(true)} onCmdOpen={() => setCmdOpen(true)} />
         <main className="flex-1 p-4 lg:p-6">{children}</main>
       </div>
-      <CommandPalette open={cmdOpen} setOpen={setCmdOpen} />
+      <CommandPaletteLoader open={cmdOpen} setOpen={setCmdOpen} />
     </div>
   );
 }

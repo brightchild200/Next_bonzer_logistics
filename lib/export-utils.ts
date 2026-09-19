@@ -1,15 +1,26 @@
-import * as XLSX from 'xlsx';
-
 export type ExportRow = Record<string, string | number | boolean | null | undefined>;
 
-export function buildWorkbook(rows: ExportRow[], sheetName: string) {
+type XLSXModule = typeof import('xlsx');
+
+let xlsxPromise: Promise<XLSXModule> | null = null;
+
+function getXLSX(): Promise<XLSXModule> {
+  if (!xlsxPromise) {
+    xlsxPromise = import('xlsx');
+  }
+  return xlsxPromise;
+}
+
+export async function buildWorkbook(rows: ExportRow[], sheetName: string) {
+  const XLSX = await getXLSX();
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31) || 'Sheet1');
   return workbook;
 }
 
-export function downloadWorkbook(workbook: XLSX.WorkBook, fileName: string) {
+export async function downloadWorkbook(workbook: Awaited<ReturnType<typeof buildWorkbook>>, fileName: string) {
+  const XLSX = await getXLSX();
   XLSX.writeFile(workbook, fileName, { bookType: 'xlsx' });
 }
 
