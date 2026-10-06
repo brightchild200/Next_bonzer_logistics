@@ -1,0 +1,769 @@
+# Phase 0 Inspection Report — Bonzer Logistics ERP
+
+No files were created or modified.
+
+The repository is currently a Next.js 13.5.1 + Supabase application with migration-driven database structure, but it does not yet have a reproducible automated testing environment.
+
+## A. Current State
+
+### 1. `package.json` and test scripts
+
+Current scripts:
+
+```json
+{
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "next lint",
+  "typecheck": "tsc --noEmit"
+}
+```
+
+No test scripts exist.
+
+No testing dependencies currently exist for:
+
+- Vitest
+- Jest
+- Playwright
+- Cypress
+- Testing Library
+- Testcontainers
+- k6
+- Artillery
+
+Existing relevant dependencies include:
+
+- `@supabase/supabase-js`
+- `@supabase/ssr`
+- `pg`
+- Next.js 13.5.1
+- React 18
+- TypeScript 5.2.2
+
+### 2. Existing testing frameworks/configuration
+
+No existing automated test framework was found.
+
+There are no:
+
+- `vitest.config.*`
+- `jest.config.*`
+- `playwright.config.*`
+- `cypress.config.*`
+- `tests/`
+- `__tests__/`
+- `*.test.*`
+- `*.spec.*`
+
+There is a manual checklist in:
+
+```text
+docs/user_testing.txt
+```
+
+It covers authentication, RBAC, customers, interactions, follow-ups, enquiry conversion, pricing, and end-to-end ERP workflows, but all testing is currently manual.
+
+### 3. Docker configuration
+
+No Docker configuration exists.
+
+Missing:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `compose.yaml`
+- `.dockerignore`
+- Supabase local configuration
+- test database container
+- test runner container
+
+### 4. Supabase/local development configuration
+
+The repository has:
+
+```text
+supabase/
+  migrations/
+  legacy-migrations/
+  .temp/
+```
+
+The `.temp` folder contains linked-project metadata and local CLI version information, but there is no visible:
+
+```text
+supabase/config.toml
+```
+
+Therefore, the project is connected to Supabase migration files but is not currently configured as a complete reproducible local Supabase stack.
+
+The setup document is:
+
+```text
+claude/SUPABASE-SETUP.md
+```
+
+It describes a hosted Supabase project setup and environment variables, but it is partly legacy and does not define a local Docker/Supabase test workflow.
+
+### 5. Migration structure
+
+Current migrations exist from:
+
+```text
+001_core_identity_rbac.sql
+```
+
+through:
+
+```text
+034_pricing_financial_tests.sql
+```
+
+Important domains covered:
+
+- Profiles and employee identity
+- Roles
+- Permissions
+- User-role assignments
+- Role-permission assignments
+- Customer master
+- Shippers and consignees
+- Customer interactions
+- Follow-ups
+- Enquiries
+- Attendance
+- Sales targets
+- Notifications
+- Port master / POL / POD
+- Vendors
+- Quotations
+- Quotation items
+- Vendor quotes
+- Exchange rates
+- Activity logs
+- Enquiry–quotation integration
+
+There are also legacy migrations:
+
+```text
+supabase/legacy-migrations/
+```
+
+These should not automatically be included in a clean test database unless their historical purpose is confirmed.
+
+Migration naming has duplicate numeric prefixes, for example:
+
+```text
+025_pol_pod_master.sql
+025_shipper_consignee_direct_create_rpcs.sql
+
+027_vendor_rpcs.sql
+027_vendors_master.sql
+
+028_quotations.sql
+028_add_is_active_to_party_masters.sql
+```
+
+This may be accepted by Supabase depending on migration metadata, but it should be validated before establishing automated reset behavior.
+
+### 6. Database schema, RLS, and functions relevant to testing
+
+The core authorization structure is:
+
+```text
+auth.users
+   ↓
+profiles
+   ↓
+user_roles
+   ↓
+roles
+   ↓
+role_permissions
+   ↓
+permissions
+```
+
+Important database functions include:
+
+- `get_my_auth_context()`
+- `current_user_has_permission(...)`
+- `handle_new_user()`
+- `set_updated_at()`
+- Customer and party creation RPCs
+- Enquiry reference and workflow functions
+- Interaction and follow-up reference functions
+- Quotation calculation triggers/functions
+
+The current auth context contains:
+
+- User identity
+- Profile information
+- Roles
+- Permissions
+
+RLS is permission-aware and is used on important tables such as:
+
+- Customers
+- Enquiries
+- Customer interactions
+- Attendance
+- Targets
+- Shippers
+- Consignees
+- Quotations and pricing-related tables
+
+The repository already has meaningful RLS logic to test. It is not sufficient to test only application-level permission checks.
+
+### 7. Existing seed/test data
+
+No dedicated deterministic seed system was found.
+
+Existing data-like files include:
+
+```text
+Seaports.csv
+port_master_import.csv
+```
+
+These appear to be master-data imports, not test fixtures.
+
+There is no dedicated:
+
+```text
+supabase/seed.sql
+tests/fixtures/
+tests/factories/
+```
+
+The migration:
+
+```text
+034_pricing_financial_tests.sql
+```
+
+contains PostgreSQL `DO` blocks and assertion helpers for pricing calculations. It is closer to an SQL verification script than a reusable automated test suite.
+
+There are no deterministic users, roles, customers, enquiries, or test organizations defined for repeatable test execution.
+
+### 8. Authentication/session architecture
+
+Authentication uses Supabase Auth with:
+
+```text
+components/auth-provider.tsx
+lib/db/client.ts
+lib/db/server.ts
+lib/db/middleware.ts
+middleware.ts
+```
+
+Client flow:
+
+1. Supabase restores or establishes the session.
+2. `AuthProvider` obtains the current user.
+3. `get_my_auth_context()` is called.
+4. Roles and permissions are stored in React state.
+5. UI permission checks use that state.
+
+Server flow:
+
+1. Server code calls `supabase.auth.getUser()`.
+2. Server authorization helpers call `get_my_auth_context()`.
+3. Server Actions check the returned roles/permissions.
+4. RLS independently evaluates database access.
+
+Current architecture does not yet have a separate automated test harness for:
+
+- Authenticated Supabase users
+- Role assignment
+- Permission assignment
+- Session restoration
+- Auth context resolution
+- RLS execution under different users
+
+Important for this testing track: authentication should remain unchanged initially. Tests should exercise the current architecture rather than redesigning it.
+
+### 9. Playwright/Cypress/Jest/Vitest setup
+
+None exists.
+
+No browser automation or E2E framework is currently installed.
+
+### 10. CI/CD configuration
+
+No CI workflow was found.
+
+There is no:
+
+```text
+.github/workflows/
+.gitlab-ci.yml
+.circleci/
+```
+
+There is a `netlify.toml`, so Netlify deployment configuration exists, but it does not define automated testing.
+
+## B. Gaps
+
+The major gaps are:
+
+- No test runner
+- No test scripts
+- No local Supabase configuration
+- No Docker environment
+- No reproducible database reset command
+- No deterministic seed users
+- No role/permission fixtures
+- No authenticated test-session strategy
+- No RLS test harness
+- No Playwright setup
+- No unit/integration test structure
+- No large-data generator
+- No performance test runner
+- No test environment variable contract
+- No CI pipeline
+- No test reports or artifacts
+- No database migration validation in CI
+
+The largest architectural gap is the absence of a reliable isolated Supabase test database. Without that, RBAC and RLS testing will remain manual or risk affecting shared data.
+
+## C. Proposed Architecture
+
+The recommended repository-specific architecture is:
+
+```text
+                    ┌──────────────────────┐
+                    │       Playwright     │
+                    │   Browser E2E tests  │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────┐
+│              Next.js test application             │
+│       Same app code, test environment variables   │
+└───────────────────────┬──────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────┐
+│        Local Supabase-compatible environment      │
+│                                                  │
+│  Auth / GoTrue    REST API    Realtime    Storage │
+│          │            │          │          │     │
+│          └────────────┴──────────┴──────────┘     │
+│                         │                        │
+│                         ▼                        │
+│                    PostgreSQL                    │
+│             migrations + deterministic seed       │
+└──────────────────────────────────────────────────┘
+```
+
+Testing layers should use the same database foundation:
+
+```text
+Unit tests
+  → pure TypeScript functions
+
+Integration tests
+  → Supabase client/server helpers
+  → isolated test database
+
+RBAC/auth-context tests
+  → seeded Supabase users and roles
+  → current get_my_auth_context RPC
+
+RLS tests
+  → authenticated Supabase clients for each test user
+  → database policies tested directly
+
+E2E tests
+  → Next.js app + local Supabase
+  → Playwright browser
+
+Performance tests
+  → separate large dataset
+  → isolated database or resettable performance environment
+```
+
+The initial architecture should preserve the existing auth model:
+
+- Supabase Auth remains the identity provider.
+- `get_my_auth_context()` remains the source of current auth context.
+- No JWT redesign should be introduced during Phase 0 or the first implementation milestone.
+- Tests should verify current behavior before any optimization is considered.
+
+## D. Testing Layers
+
+### Unit tests
+
+Target pure logic with no database:
+
+- Permission helper functions
+- Role-to-permission mappings
+- Enquiry validation
+- Customer/PAN/GST validation
+- Search parameter normalization
+- Quotation calculations
+- Export transformations
+- Status transition helpers
+
+Recommended runner: Vitest.
+
+Unit tests should be fast and run without Docker.
+
+### Integration tests
+
+Test application/database boundaries:
+
+- Server Actions
+- Supabase server client behavior
+- Customer creation
+- Enquiry creation
+- Interaction creation
+- Follow-up creation
+- Quotation calculations
+- Activity logging
+- Reference generation
+- Error handling
+
+These should run against a reset local Supabase database.
+
+### RBAC and auth-context tests
+
+Create deterministic users for roles such as:
+
+- Admin
+- Sales Manager
+- Salesperson
+- Customer Service
+- Pricing
+- Operations
+- Accounts
+
+Verify:
+
+- `get_my_auth_context()` returns expected identity
+- Roles are correctly resolved
+- Permissions are correctly resolved
+- Multiple roles combine correctly
+- Inactive users are rejected or restricted correctly
+- Unauthorized Server Actions reject requests
+- Client-visible permission state does not replace server authorization
+
+Passwords may exist only as ephemeral test fixture values in the test environment. They must never be committed as real credentials or stored in production systems.
+
+### RLS tests
+
+RLS tests should use separate authenticated Supabase clients for each seeded test user.
+
+Verify:
+
+- Salesperson sees only permitted enquiries/interactions
+- Sales Manager sees team-scoped records
+- Admin sees all permitted records
+- Customer Service sees assigned records
+- Unauthorized inserts fail
+- Unauthorized updates fail
+- Unauthorized deletes fail
+- Cross-user data access is blocked
+- RLS cannot be bypassed through client-submitted IDs
+- Service-role access is used only by controlled setup/cleanup code
+
+RLS tests must execute against PostgreSQL/Supabase, not mocks.
+
+### E2E tests
+
+Playwright should cover critical user journeys:
+
+- Login
+- Logout
+- Route protection
+- Customer creation
+- Enquiry creation
+- Customer interaction creation
+- Follow-up creation/completion
+- Role-specific navigation
+- Unauthorized page access
+- Search/select workflows
+- Export flow
+- Validation and error states
+
+E2E tests should use seeded accounts and deterministic data.
+
+### Performance tests
+
+Performance testing should be separate from functional tests.
+
+Targets:
+
+- Customer search with large customer volume
+- Enquiry list filtering and pagination
+- Interaction list filtering
+- Port search
+- Permission/RLS query behavior
+- Dashboard queries
+- Quotation calculation queries
+- Bulk export behavior
+
+A large performance dataset should not be loaded into the standard functional test database.
+
+Recommended later tool: k6 or Artillery for HTTP/load testing, plus PostgreSQL query analysis where useful.
+
+## E. Docker Strategy
+
+### Containerize
+
+The test environment should eventually containerize:
+
+- Next.js test application
+- Supabase local stack or the required Supabase services
+- PostgreSQL
+- Auth service
+- REST/PostgREST
+- Storage service if attachment flows are tested
+- Playwright test runner
+- Optional performance test runner
+
+The most practical first implementation is to use the official Supabase CLI local stack rather than manually recreating every Supabase service.
+
+### Keep outside Docker initially
+
+Keep these outside the production-like Docker stack at first:
+
+- Hosted Supabase production project
+- Real user accounts
+- Real customer data
+- Real secrets
+- Netlify deployment
+- Production database
+- External email delivery
+- External geolocation services
+
+The test environment should use local or mocked equivalents for external services.
+
+### Environment separation
+
+Use explicit test variables such as:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+SUPABASE_SERVICE_ROLE_KEY
+NEXT_PUBLIC_API_URL
+```
+
+The test environment must have its own values and must never point at the production Supabase project.
+
+A guard should eventually prevent test commands from running against a production Supabase URL.
+
+## F. Test Data Strategy
+
+### Functional/E2E seed
+
+Create a small deterministic seed set containing:
+
+#### Users
+
+- `admin`
+- `sales_manager`
+- `salesperson_a`
+- `salesperson_b`
+- `customer_service`
+- `pricing`
+- `operations`
+- `accounts`
+
+Each user should have:
+
+- Stable UUID where practical
+- Stable email identifier
+- Known test-only password injected through environment variables or fixture setup
+- Profile
+- Role assignment
+- Expected permissions
+
+#### Master data
+
+- A few customers
+- A few shippers
+- A few consignees
+- A small port master subset
+- A few vendors
+- Exchange-rate records
+
+#### Workflow data
+
+- Own salesperson enquiry
+- Another salesperson enquiry
+- Team enquiry
+- Customer-service assigned enquiry
+- Interaction with follow-ups
+- Draft and sent quotation
+- Test activity records
+- Attendance and target records
+
+All seed records should use stable labels or references so tests can find them without relying on random data.
+
+### Performance dataset
+
+Keep this separate from the functional seed.
+
+Possible scale:
+
+- 10,000–100,000 customers
+- 50,000–500,000 enquiries
+- 100,000+ interactions
+- Large port and vendor datasets
+- Multiple users and role assignments
+
+The performance dataset should be generated programmatically and be resettable. It should not be committed as a massive CSV unless there is a strong reason.
+
+## G. Implementation Roadmap
+
+### Milestone 1 — Test foundation
+
+1. Add Vitest.
+2. Add test scripts.
+3. Create test directory conventions.
+4. Add a minimal unit test for permission helpers.
+5. Keep this entirely outside production runtime behavior.
+
+### Milestone 2 — Local Supabase configuration
+
+1. Add/validate `supabase/config.toml`.
+2. Confirm migration ordering.
+3. Decide how legacy migrations are excluded.
+4. Add local database reset command.
+5. Verify all current migrations apply cleanly.
+6. Add a minimal deterministic seed.
+
+### Milestone 3 — Auth and RBAC fixtures
+
+1. Create test users through Supabase Auth setup.
+2. Seed profiles, roles, permissions, and user-role mappings.
+3. Test `get_my_auth_context()`.
+4. Add role/permission matrix tests.
+5. Ensure no raw production passwords are used.
+
+### Milestone 4 — RLS integration suite
+
+1. Create authenticated test clients.
+2. Test customer and enquiry isolation.
+3. Test interaction and follow-up visibility.
+4. Test quotation/pricing access.
+5. Test unauthorized mutations.
+6. Test inactive-user behavior.
+
+### Milestone 5 — Server Action integration tests
+
+1. Add reusable test authentication helpers.
+2. Test representative Server Actions.
+3. Validate error and permission paths.
+4. Confirm Server Actions and RLS agree.
+
+### Milestone 6 — Playwright E2E
+
+1. Add Playwright.
+2. Add local app startup configuration.
+3. Add login fixture.
+4. Add core workflow tests.
+5. Add role-specific E2E projects or fixtures.
+6. Save screenshots/traces only on failure initially.
+
+### Milestone 7 — Performance suite
+
+1. Add performance dataset generator.
+2. Add search/list benchmarks.
+3. Add database query timing.
+4. Add HTTP load testing.
+5. Define thresholds.
+
+### Milestone 8 — CI/CD
+
+1. Run lint and typecheck.
+2. Start local Supabase.
+3. Apply migrations and seed.
+4. Run unit/integration/RLS tests.
+5. Build the app.
+6. Run Playwright.
+7. Upload reports and traces.
+8. Add performance tests separately from every-commit CI.
+
+## H. Risks
+
+### Authentication/session handling
+
+The current application depends on Supabase Auth sessions and `get_my_auth_context()`. Test helpers must create real authenticated sessions rather than mocking identity for RLS tests.
+
+### Supabase compatibility
+
+Local Supabase versions must remain compatible with:
+
+- Postgres functions
+- Auth behavior
+- RLS expressions
+- Storage policies
+- Supabase SSR cookie handling
+
+### RLS testing
+
+RLS can appear correct when tested with a service-role client because service-role access bypasses RLS. RLS tests must use normal authenticated clients.
+
+### Test isolation
+
+Tests must not share mutable records unintentionally. Database reset or transaction isolation will be required.
+
+### Seed ordering
+
+The schema has many foreign keys and role/permission dependencies. Seed order must be:
+
+```text
+auth users
+→ profiles
+→ roles/permissions
+→ user roles/role permissions
+→ master data
+→ workflow data
+```
+
+### Migration ordering
+
+Duplicate migration number prefixes require explicit validation before relying on automated database reset.
+
+### Existing repository state
+
+The current worktree already contains many unrelated uncommitted changes. The testing track should be isolated carefully, ideally using a dedicated branch/worktree before implementation begins.
+
+### External services
+
+Attachments, location lookup, email, and other external services may make tests flaky. These should be mocked or replaced with local test doubles in later milestones.
+
+### Production safety
+
+The test harness must prevent accidental use of:
+
+- Production Supabase URL
+- Production service-role key
+- Real user accounts
+- Real customer data
+
+## I. First Implementation Step
+
+The first implementation step should be:
+
+> Add and validate a local Supabase test configuration, then prove that the complete current migration chain can reset successfully against an isolated database.
+
+Specifically, the first implementation should:
+
+1. Confirm whether Supabase CLI is available.
+2. Add only the minimum local Supabase configuration required.
+3. Validate migration ordering.
+4. Run a clean local database reset.
+5. Confirm that migrations `001` through `034` apply successfully.
+6. Do not add new production functionality.
+7. Do not change authentication behavior.
+8. Do not add permission caching or JWT redesign.
+9. Do not create E2E tests until the database reset is deterministic.
+
+After that baseline is proven, the next step should be a small deterministic auth/RBAC seed and a test for `get_my_auth_context()`.

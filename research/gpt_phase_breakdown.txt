@@ -1,0 +1,991 @@
+Ab exact plan yeh hai
+Fresh Supabase project create karo.
+Core RBAC banao: profiles, roles, permissions, user_roles, role_permissions.
+Seed all seven known roles: admin, sales_manager, salesperson, customer_service, pricing, operations, accounts.
+Build Admin user creation with multiple role assignment + email invite/set-password flow.
+Build login and one combined role-aware dashboard.
+Build only known Sales V1 tables: teams, team_members, customers, customer_interactions, follow_ups, enquiries, customer_kyc, jobs, attendance, notifications, activity_logs.
+Implement the known flow: Customer → Visit/Call/Meeting → Follow-up → Enquiry → Assigned CS → KYC tracking → Job conversion.
+Add 7-day, 1-day, same-day follow-up reminders and daily pending-KYC reminders.
+Add salesperson daily reports and Sales Manager/Admin team visibility.
+Pricing, Operations and Accounts tables abhi mat banao. Roles exist karenge, but their dashboards can simply show an empty/coming-soon state until workflows are defined.
+
+
+
+
+
+Haan. Since **DB currently completely empty hai and implementation start bhi nahi hui**, tumhe random tables bana ke UI connect nahi karna chahiye.
+
+Tumhari existing guide mein RBAC tables, backend permission utilities, admin user creation, frontend guards, dashboard, and field-level access ko phases mein separate kiya gaya tha.   
+
+**Main tumhare project ko zero se is exact order mein build karunga:**
+
+## Phase 0 — Current project ko freeze karo
+
+Abhi Bolt UI delete nahi karni.
+
+Current React project ka backup lo aur ek Git branch banao:
+
+```bash
+git add .
+git commit -m "backup before new supabase architecture"
+
+git checkout -b new-supabase-architecture
+```
+
+Old Supabase env variables ko temporarily note kar lo.
+
+```text
+OLD_SUPABASE_URL
+OLD_SUPABASE_ANON_KEY
+```
+
+Bolt-generated tables ko migrate ya recreate **abhi nahi karna**.
+
+React UI ko hum **reference UI** treat karenge.
+
+**Output of Phase 0:** existing project safe hai.
+
+---
+
+## Phase 1 — Complete business workflow document banao
+
+**Database banane se pehle yeh karna mandatory hai.**
+
+Abhi humne sirf Sales workflow discuss kiya hai.
+
+Current roles:
+
+```text
+Admin
+Sales Manager
+Salesperson
+Customer Service
+Pricing
+Operations
+Accounts
+```
+
+Har role ke liye hum define karenge:
+
+```text
+ROLE
+↓
+Pages
+↓
+Actions
+↓
+Data visibility
+↓
+Editable fields
+↓
+Next workflow stage
+```
+
+Example:
+
+```text
+SALESPERSON
+
+Pages:
+- Dashboard
+- Customers
+- Follow Ups
+- Enquiries
+- Attendance
+- Reports
+
+Can:
+- Add customer
+- Add interaction
+- Schedule follow-up
+- Create enquiry
+- Assign CS
+- View own enquiries
+- Complete KYC
+
+Cannot:
+- Add pricing
+- Convert enquiry to invoice
+- Manage users
+```
+
+CS:
+
+```text
+CUSTOMER SERVICE
+
+Pages:
+- Dashboard
+- Assigned Enquiries
+- Customers
+- Jobs
+
+Can:
+- View assigned enquiry
+- Add CS details
+- Update enquiry
+- Finalize enquiry
+- Convert enquiry to job
+
+Cannot:
+- Create users
+- Manage attendance
+```
+
+And similarly Pricing, Operations, Accounts.
+
+### Tumhara next actual task
+
+**Mujhe role-by-role workflow batao.**
+
+Order:
+
+```text
+1. Salesperson       ← DONE approximately
+2. Sales Manager
+3. Customer Service
+4. Pricing
+5. Operations
+6. Accounts
+7. Admin
+```
+
+**Output of Phase 1:** `BONZER-BUSINESS-WORKFLOW.md`
+
+Until this is complete:
+
+> ❌ No SQL
+> ❌ No Supabase tables
+> ❌ No React modification
+
+---
+
+## Phase 2 — Permission matrix freeze karenge
+
+Workflow complete hone ke baad hum proper permission matrix create karenge.
+
+Example:
+
+| Permission              | Sales | Sales Manager | CS | Pricing | Ops | Accounts | Admin |
+| ----------------------- | ----- | ------------- | -- | ------- | --- | -------- | ----- |
+| customer:create         | ✓     | ✓             | ✓  |         |     |          | ✓     |
+| customer:read_own       | ✓     |               |    |         |     |          | ✓     |
+| customer:read_team      |       | ✓             |    |         |     |          | ✓     |
+| enquiry:create          | ✓     | ✓             |    |         |     |          | ✓     |
+| enquiry:assign_cs       | ✓     | ✓             |    |         |     |          | ✓     |
+| enquiry:edit_cs_details |       |               | ✓  |         |     |          | ✓     |
+| enquiry:convert_job     |       | ✓             | ✓  |         |     |          | ✓     |
+| pricing:create          |       |               |    | ✓       |     |          | ✓     |
+| job:update_operations   |       |               |    |         | ✓   |          | ✓     |
+| invoice:create          |       |               |    |         |     | ✓        | ✓     |
+
+Multi-role user ke permissions **union** honge. Tumhari guide ka existing model bhi exactly granular permissions such as `enquiry:create`, `enquiry:read_own`, `enquiry:edit_all`, and `enquiry:add_details` define karta hai. 
+
+Example:
+
+```text
+Riya
+
+roles:
+salesperson
+customer_service
+
+Effective permissions:
+
+salesperson permissions
+        UNION
+customer_service permissions
+```
+
+**Output of Phase 2:** `BONZER-PERMISSION-MATRIX.md`
+
+---
+
+## Phase 3 — Complete ER diagram and database schema design
+
+Ab database entities decide karenge.
+
+Current expected tables approximately:
+
+```text
+AUTH / RBAC
+
+auth.users
+profiles
+roles
+permissions
+user_roles
+role_permissions
+
+
+ORGANIZATION
+
+teams
+team_members
+
+
+CUSTOMERS
+
+customers
+customer_kyc
+customer_interactions
+
+
+SALES
+
+follow_ups
+enquiries
+enquiry_assignments
+
+
+JOBS
+
+jobs
+
+
+ATTENDANCE
+
+attendance
+
+
+SYSTEM
+
+notifications
+activity_logs
+sequence_counters
+```
+
+Pricing, Operations aur Accounts workflow ke baad aur tables add hongi.
+
+For example possibly:
+
+```text
+quotations
+quotation_items
+
+job_operations
+shipments
+
+invoices
+payments
+```
+
+But **main abhi blindly ye tables create nahi karunga**.
+
+Workflow first.
+
+Then relationships:
+
+```text
+customers
+    │
+    ├── customer_interactions
+    │
+    ├── follow_ups
+    │
+    ├── customer_kyc
+    │
+    └── enquiries
+             │
+             └── jobs
+```
+
+**Output of Phase 3:**
+
+```text
+BONZER-ER-DIAGRAM.md
+BONZER-DATABASE-SCHEMA.md
+```
+
+---
+
+## Phase 4 — Fresh Supabase project setup
+
+Tab new [Supabase](https://supabase.com/?utm_source=chatgpt.com) project create karna.
+
+```text
+Bonzer Production / Bonzer V2
+```
+
+React ko immediately connect **mat karna**.
+
+First database independently build karenge.
+
+Execution order:
+
+```text
+01_extensions.sql
+
+02_rbac.sql
+profiles
+roles
+permissions
+user_roles
+role_permissions
+
+03_organization.sql
+teams
+team_members
+
+04_customers.sql
+customers
+customer_kyc
+customer_interactions
+
+05_sales.sql
+follow_ups
+enquiries
+enquiry_assignments
+
+06_jobs.sql
+jobs
+
+07_attendance.sql
+attendance
+
+08_notifications.sql
+notifications
+
+09_audit.sql
+activity_logs
+
+10_sequences.sql
+sequence functions
+
+11_rls.sql
+all RLS policies
+
+12_seed.sql
+roles
+permissions
+admin bootstrap
+```
+
+**One giant 2,000-line SQL file nahi banana.**
+
+Separate migration-style SQL files.
+
+**Output of Phase 4:** clean working database.
+
+---
+
+## Phase 5 — Auth and admin-created user onboarding
+
+Ye **first actual feature** implement karenge.
+
+Admin page:
+
+```text
+/admin/users/new
+```
+
+Form:
+
+```text
+Full Name
+Email
+Employee ID
+
+Roles
+
+☐ Sales Manager
+☐ Salesperson
+☐ Customer Service
+☐ Pricing
+☐ Operations
+☐ Accounts
+☐ Admin
+
+[ CREATE USER ]
+```
+
+Flow:
+
+```text
+Admin
+  ↓
+Create User
+  ↓
+Secure server-side function/API
+  ↓
+Create/invite Supabase Auth user
+  ↓
+Create profiles row
+  ↓
+Insert multiple user_roles
+  ↓
+User receives account setup email
+  ↓
+User sets password
+  ↓
+Login
+```
+
+Important:
+
+```text
+SUPABASE_SERVICE_ROLE_KEY
+```
+
+**React frontend mein kabhi nahi jayegi.**
+
+Wrong:
+
+```typescript
+VITE_SUPABASE_SERVICE_ROLE_KEY
+```
+
+❌ Never.
+
+Admin user creation server-side hona chahiye.
+
+**Output of Phase 5:** Admin can create users and assign multiple roles.
+
+---
+
+## Phase 6 — Login + RBAC engine
+
+Ab React mein auth connect karenge.
+
+Create:
+
+```text
+src/
+├── lib/
+│   └── supabase.ts
+│
+├── contexts/
+│   └── AuthContext.tsx
+│
+├── hooks/
+│   ├── useAuth.ts
+│   ├── useRoles.ts
+│   └── usePermissions.ts
+│
+└── components/
+    └── auth/
+        ├── ProtectedRoute.tsx
+        ├── RoleGuard.tsx
+        └── PermissionGuard.tsx
+```
+
+Usage:
+
+```tsx
+<PermissionGuard permission="enquiry:create">
+  <CreateEnquiryButton />
+</PermissionGuard>
+```
+
+Or:
+
+```tsx
+const { can } = usePermissions();
+
+if (can("enquiry:add_cs_details")) {
+  // show CS fields
+}
+```
+
+Dashboard:
+
+```text
+Riya
+
+Roles:
+Salesperson
+Customer Service
+
+Dashboard modules:
+
+Sales Dashboard
+Follow Ups
+Customers
+Enquiries
+
+CS Dashboard
+Assigned Enquiries
+CS Processing
+Jobs
+```
+
+**One dashboard. Combined modules.**
+
+Tumhari current guide bhi login ke baad roles fetch karke combined salesperson + CS features show karne ka same pattern define karti hai. 
+
+**Output of Phase 6:** multi-role dashboard works.
+
+---
+
+## Phase 7 — Customer module
+
+**First business module.**
+
+Build:
+
+```text
+/customers
+/customers/new
+/customers/:id
+```
+
+Features:
+
+```text
+Search customer
+View customer
+Add customer
+Edit allowed fields
+Customer interaction history
+KYC status
+Enquiries
+Follow-ups
+```
+
+Customer number:
+
+```text
+CUS-00001
+CUS-00002
+CUS-00003
+```
+
+Test:
+
+```text
+Salesperson adds customer during visit
+
+↓
+
+Customer immediately appears in main customer DB
+
+↓
+
+Create Enquiry
+
+↓
+
+Search customer
+
+↓
+
+Same customer appears
+```
+
+**Output of Phase 7:** single customer source of truth.
+
+---
+
+## Phase 8 — Sales interaction + follow-up module
+
+Build:
+
+```text
+/interactions
+/follow-ups
+```
+
+Interaction:
+
+```text
+VISIT
+CALL
+MEETING
+```
+
+Follow-up:
+
+```text
+Customer
+Type
+Scheduled Date
+Purpose
+Notes
+Status
+```
+
+Statuses:
+
+```text
+PENDING
+COMPLETED
+CANCELLED
+RESCHEDULED
+```
+
+Notification rules:
+
+```text
+T - 7 days
+T - 1 day
+T day
+```
+
+Dashboard:
+
+```text
+UPCOMING FOLLOW UPS
+
+Today        3
+Tomorrow     2
+This Week    7
+Overdue      1
+```
+
+**Output of Phase 8:** complete follow-up workflow.
+
+---
+
+## Phase 9 — Enquiry module
+
+Then enquiry.
+
+```text
+/enquiries
+/enquiries/new
+/enquiries/:id
+```
+
+Flow:
+
+```text
+Salesperson
+    ↓
+Select Customer
+
+OR
+
+Add New Customer
+    ↓
+Create Enquiry
+    ↓
+ENQ-00001
+    ↓
+Assign CS
+```
+
+Visibility:
+
+```text
+Salesperson → own enquiries
+
+CS → assigned enquiries
+
+Sales Manager → team enquiries
+
+Admin → all enquiries
+```
+
+Field permissions:
+
+```text
+Salesperson fields
+        ↓
+sales fields
+
+CS fields
+        ↓
+customer service fields
+```
+
+**Frontend hides fields.**
+
+But more importantly:
+
+```text
+RLS / server validation blocks unauthorized updates.
+```
+
+UI hiding alone is **not security**.
+
+**Output of Phase 9:** Sales → CS enquiry handoff works.
+
+---
+
+## Phase 10 — KYC workflow
+
+Customer:
+
+```text
+KYC Status
+
+NOT_STARTED
+PENDING
+SUBMITTED
+VERIFIED
+REJECTED
+```
+
+Rule:
+
+```text
+Active Enquiry
+AND
+KYC != VERIFIED
+
+↓
+
+Daily salesperson reminder
+```
+
+Stop when:
+
+```text
+KYC = VERIFIED
+```
+
+Dashboard:
+
+```text
+KYC ACTION REQUIRED
+
+CUS-00021
+ABC Logistics
+
+ENQ-00031
+
+Pending for 4 days
+
+[ COMPLETE KYC ]
+```
+
+**Output of Phase 10:** automatic KYC tracking.
+
+---
+
+## Phase 11 — Enquiry → Job conversion
+
+Allowed:
+
+```text
+Customer Service
+Sales Manager
+Admin
+```
+
+Button:
+
+```text
+[ CONVERT TO JOB ]
+```
+
+Backend validates:
+
+```text
+Enquiry finalized?
+Customer valid?
+Required fields complete?
+Already converted?
+```
+
+Then transaction:
+
+```text
+Create JOB-00001
+
+↓
+
+Link enquiry_id
+
+↓
+
+Set enquiry status = CONVERTED
+
+↓
+
+Create activity log
+```
+
+The conversion must be **idempotent**—double-click ya duplicate request se two jobs create nahi hone chahiye.
+
+**Output of Phase 11:** enquiry lifecycle complete.
+
+---
+
+## Phase 12 — Attendance + team hierarchy
+
+Create:
+
+```text
+teams
+team_members
+attendance
+```
+
+Example:
+
+```text
+Mumbai Sales Team
+
+Manager:
+Amit
+
+Members:
+Riya
+Rahul
+Karan
+```
+
+Dashboard widget:
+
+```text
+ATTENDANCE
+
+Not Checked In
+
+📍 Location required
+
+[ CHECK IN ]
+```
+
+Save:
+
+```text
+latitude
+longitude
+accuracy
+check_in_at
+```
+
+Sales Manager:
+
+```text
+Team Attendance
+```
+
+Admin:
+
+```text
+All Attendance
+```
+
+**Output of Phase 12:** location attendance works.
+
+---
+
+## Phase 13 — Reports
+
+Reports **data se generate honge**.
+
+Salesperson:
+
+```text
+My Daily Report
+```
+
+Sales Manager:
+
+```text
+Team Daily Report
+```
+
+Admin:
+
+```text
+Organization Report
+```
+
+Metrics:
+
+```text
+Visits
+Calls
+Meetings
+Follow-ups created
+Follow-ups completed
+Customers added
+Enquiries created
+Jobs converted
+```
+
+Date filters:
+
+```text
+Today
+Yesterday
+This Week
+This Month
+Custom Range
+```
+
+**Output of Phase 13:** daily reporting complete.
+
+---
+
+## Phase 14 — Bolt UI refactor
+
+**Ab finally Bolt UI touch karenge.**
+
+Page-by-page:
+
+```text
+Existing Bolt Page
+        ↓
+Check business workflow
+        ↓
+Remove fake data
+        ↓
+Remove Bolt DB calls
+        ↓
+Connect new Supabase query
+        ↓
+Add PermissionGuard
+        ↓
+Add loading/error state
+        ↓
+Test role access
+```
+
+Example:
+
+```text
+Old Enquiry Page
+
+fakeEnquiries[]
+Bolt table
+hardcoded role
+
+↓
+
+New Enquiry Page
+
+Supabase enquiries
+customer relation
+created_by
+assigned_cs_id
+permission checks
+```
+
+**Whole UI ek saath rewrite nahi karni.**
+
+One module at a time.
+
+---
+
+# Tumhara exact execution order
+
+1. **Finish all 7 role workflows with me.**
+2. Freeze permission matrix.
+3. Design complete ER diagram.
+4. Design all DB tables and relationships.
+5. Create fresh Supabase project.
+6. Run schema/migrations.
+7. Seed roles and permissions.
+8. Implement admin-created user + invite/set-password flow.
+9. Implement login and multi-role RBAC.
+10. Build customer module.
+11. Build interactions and follow-ups.
+12. Build enquiry workflow.
+13. Build KYC reminders.
+14. Build enquiry-to-job conversion.
+15. Build attendance and hierarchy.
+16. Build reports.
+17. Map Pricing workflow.
+18. Map Operations workflow.
+19. Map Accounts workflow.
+20. Refactor Bolt UI module-by-module.
+
+**Abhi tum Supabase mein ek bhi table mat banao.**
+
+Tumhara **next step only Customer Service workflow explain karna hai**, exactly waise hi jaise tumne salesperson explain kiya. Uske baad Sales Manager → Pricing → Operations → Accounts → Admin. Phir main tumhare liye **final DB blueprint freeze karunga**.

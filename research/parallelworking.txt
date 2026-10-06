@@ -1,0 +1,32 @@
+Main Recommendation
+
+Main 3-track workflow recommend karunga.
+
+Track 1 (Main)
+
+Nemotron
+
+Customer
+Team
+Interaction
+Enquiry
+Pricing
+Jobs
+Track 2 (Independent)
+
+Another model
+
+Dashboard
+Notifications
+Audit Logs
+Settings
+Track 3 (Documentation)
+
+ChatGPT (me)
+
+Architecture review
+DB review
+Code review
+TODO management
+Prompt engineering
+Business workflow decisions

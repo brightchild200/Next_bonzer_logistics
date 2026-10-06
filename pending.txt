@@ -1,0 +1,28 @@
+Plan: Create ConsigneeWorkspace Component
+Approach
+Copy shipper-workspace.tsx and systematically replace all shipper-specific references with consignee equivalents. This is a mechanical transformation - no logic changes needed.
+File to Create
+components/consignee-workspace.tsx
+Systematic Replacements
+Category	Shipper → Consignee
+Imports	@/lib/actions/shippers/* → @/lib/actions/consignees/*
+Types	Shipper → Consignee, ShipperInput → ConsigneeInput, ShipperSearchResult → ConsigneeSearchResult
+Actions	createShipper → createConsignee, updateShipper → updateConsignee, deleteShipper → deleteConsignee, listShippers → listConsignees, searchShippers → searchConsignees
+State variables	shippers → consignees, shipper → consignee (all occurrences)
+URL params	shipperId → consigneeId
+Table columns	shipper_ref → consignee_ref
+Icons	Building2 → Package
+Labels/Text	"Shipper" → "Consignee" (titles, buttons, toasts, aria-labels)
+Search placeholder	"shipper ref" → "consignee ref"
+Empty state	"No shippers" → "No consignees"
+Suggestion dropdown	shipper-suggestions → consignee-suggestions
+Key Logic Unchanged
+- Validation functions (PAN, GSTIN, email, phone, pincode)
+- Duplicate detection logic
+- Company name autocomplete (uses searchConsignees)
+- Dialog structure (Create/Edit/View/Delete)
+- Sorting, pagination, search debouncing
+Estimated Lines
+~1,296 lines (same as ShipperWorkspace)
+Ready to Execute?
+Once you confirm, I'll generate the complete file content. Want me to proceed?
